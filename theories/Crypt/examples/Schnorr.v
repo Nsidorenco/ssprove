@@ -176,24 +176,25 @@ Proof.
   pose f' := f e w.
   subst f'. unfold f.
   exists (fun x => (fto (otf x - w * e))).
-  - intro x; unfold fto, otf; rewrite !enum_rankK GRing.addrK enum_valK; reflexivity. 
-  - intro x; unfold fto, otf; rewrite !enum_rankK GRing.subrK enum_valK; reflexivity.
+  all: intro x; unfold fto, otf; rewrite !enum_rankK.
+  - rewrite GRing.addrK enum_valK. reflexivity. 
+  - rewrite GRing.subrK enum_valK. reflexivity. 
 Qed.
 
-Lemma Schnorr_SHVZK h w e:
+Lemma Schnorr_SHVZK h w:
   R (otf h) (otf w) →
   ∀ LA A, 
-    ValidPackage LA [interface val #[ RUN ] : 'unit → chTranscript] A_export A →
-    fdisjoint LA (SHVZK h w e true).(locs) →
-    fdisjoint LA (SHVZK h w e false).(locs) →
-    Advantage (SHVZK h w e) A = 0.
+    ValidPackage LA [interface val #[ RUN ] : chChallenge → chTranscript] A_export A →
+    fdisjoint LA (SHVZK h w true).(locs) →
+    fdisjoint LA (SHVZK h w false).(locs) →
+    Advantage (SHVZK h w) A = 0.
 Proof.
   unfold R=> rel. apply reflection_nonsense in rel.
   intros LA A Hvalid Hdis1 Hdis2.
   rewrite Advantage_E.
   apply: eq_rel_perf_ind_eq.
   2,3: assumption.
-  simplify_eq_rel m.
+  simplify_eq_rel e.
   ssprove_code_link_commute. simpl.
   simplify_linking.
   (* Programming logic part *)
@@ -216,3 +217,4 @@ Proof.
   - rewrite mulgV expg1n mul1g Zp_mulC. reflexivity.
   - apply group_prodC.
 Qed.
+

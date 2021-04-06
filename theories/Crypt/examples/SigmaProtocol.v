@@ -81,7 +81,6 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
   Notation " 'chStatement' " := choiceStatement (in custom pack_type at level 2).
   Notation " 'chMessage' " := choiceMessage (in custom pack_type at level 2).
   Notation " 'chCommit' " := (chProd choiceMessage choiceState) (in custom pack_type at level 2).
-  Notation " 'chChallenge' " := choiceChallenge (in custom pack_type at level 2).
   Notation " 'chResponse' " := choiceResponse (in custom pack_type at level 2).
   Notation " 'chFst' " :=
     (chProd (chProd choiceMessage choiceState) choiceChallenge)
@@ -96,19 +95,30 @@ Module SigmaProtocol (π : SigmaProtocolParams)
   Import Alg.
 
   (* Compatibitlity *)
+  Notation " 'chInput' " := (chProd choiceStatement choiceChallenge) (in custom pack_type at level 2).
+  Notation " 'chChallenge' " := choiceChallenge (in custom pack_type at level 2).
+  Notation " 'chCommit' " := choiceMessage (in custom pack_type at level 2).
+  Notation " 'chOpen' " := (chProd choiceChallenge choiceResponse) (in custom pack_type at level 2).
   Notation " 'chTranscript' " := choiceTranscript (in custom pack_type at level 2).
   Definition i_witness := #|Witness|.
   Definition RUN : nat := 0.
+  Definition COM : nat := 1.
+  Definition VER : nat := 2.
+
+  (* Commitment scheme specific *)
+  Notation " 'chBool' " := 'fin #|bool_choiceType| (in custom pack_type at level 2).
+  Notation " 'chOpen' " := (chProd choiceTranscript choiceChallenge) (in custom pack_type at level 2).
+
 
 
   Local Open Scope package_scope.
 
-  Definition RUN_real (h : choiceStatement) (w : choiceWitness) (e : choiceChallenge):
+  Definition RUN_real (h : choiceStatement) (w : choiceWitness) :
     package fset0
       [interface]
-      [interface val #[ RUN ] : 'unit → chTranscript] :=
+      [interface val #[ RUN ] : chChallenge → chTranscript] :=
     [package
-     def #[ RUN ] (_: 'unit) : chTranscript
+     def #[ RUN ] (e: chChallenge) : chTranscript
       {
         m ← Commit h w ;;
         let '(a, s) := m in
@@ -117,20 +127,41 @@ Module SigmaProtocol (π : SigmaProtocolParams)
       }
     ].
   
-  Definition RUN_ideal (h : choiceStatement) (e : choiceChallenge):
+  Definition RUN_ideal (h : choiceStatement):
     package fset0
       [interface]
-      [interface val #[ RUN ] : 'unit → chTranscript] :=
+      [interface val #[ RUN ] : chChallenge → chTranscript] :=
     [package
-     def #[ RUN ] (_: 'unit) : chTranscript
+     def #[ RUN ] (e: chChallenge) : chTranscript
       {
         t ← Simulate h e ;;
         ret t
       }
     ].
   
-  Definition SHVZK h w e :
-    loc_GamePair [interface val #[ RUN ] : 'unit → chTranscript] :=
-    fun b => if b then {locpackage (RUN_ideal h e)} else {locpackage (RUN_real h w e)}.
+  Definition SHVZK h w :
+    loc_GamePair [interface val #[ RUN ] : chChallenge → chTranscript] :=
+    fun b => if b then {locpackage (RUN_ideal h)} else {locpackage (RUN_real h w)}.
+
+  Definition CommitmentScheme_SigmaProtocol:
+    package fset0
+      [interface val #[ RUN ] : chChallenge → chTranscript]
+      [interface val #[ COM ] : chChallenge → chTranscript ;
+                 val #[ VER ] : chOpen → chBool] :=
+    [package
+     def #[ COM ] (e : chChallenge) : chTranscript
+     {
+       #import {sig #[ RUN ] : chChallenge → chTranscript} as run ;;
+       t ← run e ;; ret t
+     }
+     ;
+     def #[ VER ] (te : chOpen) : chBool
+     {
+       #import {sig #[ RUN ] : chChallenge → chTranscript} as run ;;
+       let '(t, e) := te in
+       t' ← run e ;;
+       ret (otf (t == t'))
+     } 
+    ].
 
 End SigmaProtocol.
