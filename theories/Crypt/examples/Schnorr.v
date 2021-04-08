@@ -132,6 +132,8 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
 
   Definition i_witness := #|Witness|.
 
+  Definition HIDING : nat := 0.
+
   Definition Commit {L : {fset Location}} (h : choiceStatement) (w : choiceWitness):
     code L [interface] (choiceMessage × choiceState) :=
     {code
@@ -181,24 +183,31 @@ Proof.
   - rewrite GRing.subrK enum_valK. reflexivity. 
 Qed.
 
-Lemma Schnorr_SHVZK h w:
-  R (otf h) (otf w) →
+Lemma schnorr_SHVZK:
   ∀ LA A, 
-    ValidPackage LA [interface val #[ RUN ] : chChallenge → chTranscript] A_export A →
-    fdisjoint LA (SHVZK h w true).(locs) →
-    fdisjoint LA (SHVZK h w false).(locs) →
-    Advantage (SHVZK h w) A = 0.
+    ValidPackage LA [interface val #[ RUN ] : chInput → 'option chTranscript] A_export A →
+    fdisjoint LA (SHVZK true).(locs) →
+    fdisjoint LA (SHVZK false).(locs) →
+    Advantage SHVZK A = 0.
 Proof.
-  unfold R=> rel. apply reflection_nonsense in rel.
   intros LA A Hvalid Hdis1 Hdis2.
   rewrite Advantage_E.
   apply: eq_rel_perf_ind_eq.
   2,3: assumption.
-  simplify_eq_rel e.
+  simplify_eq_rel hwe.
   ssprove_code_link_commute. simpl.
   simplify_linking.
   (* Programming logic part *)
-  eapply r_uniform_bij with (1 := bij_f (otf w) (otf e))=> z_val.
+  destruct hwe as [[statement witness] challenge].
+  case_eq (R (otf statement) (otf witness)).
+  (* We can only simulate if the relation is valid *)
+  2: { intros _.
+       apply r_ret.
+       intuition. }
+
+  (* When relation holds we can reconstruct the first message from the response *)
+  unfold R=> rel. apply reflection_nonsense in rel.
+  eapply r_uniform_bij with (1 := bij_f (otf witness) (otf challenge))=> z_val.
   apply r_ret.
   (* Ambient logic proof of post condition *)
   intros s0 s1 Hs.
@@ -218,3 +227,20 @@ Proof.
   - apply group_prodC.
 Qed.
 
+Theorem schnorr_com_hiding :
+  ∀ LA A,
+    ValidPackage LA [interface val #[ HIDING ] : chRel → 'option chTranscript] A_export A →
+    fdisjoint LA (SHVZK true).(locs) →
+    fdisjoint LA (SHVZK false).(locs) →
+    AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK false) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK false) A <= 0.
+Proof.
+  intros LA A Va Hdis1 Hdis2.
+  have H := Commitment_Hiding LA A 0 Va.
+  rewrite GRing.addr0 in H.
+  have HS := schnorr_SHVZK _ _ _ Hdis1 Hdis2.
+  apply AdvantageE_le_0 in H.
+  1: rewrite H; trivial.
+  move=> A' Va'.
+  have -> := HS A' Va'.
+  trivial.
+Qed.

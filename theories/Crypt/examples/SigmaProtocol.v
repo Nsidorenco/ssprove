@@ -95,73 +95,187 @@ Module SigmaProtocol (π : SigmaProtocolParams)
   Import Alg.
 
   (* Compatibitlity *)
-  Notation " 'chInput' " := (chProd choiceStatement choiceChallenge) (in custom pack_type at level 2).
+  Notation " 'chInput' " := (chProd (chProd choiceStatement choiceWitness) choiceChallenge) (in custom pack_type at level 2).
   Notation " 'chChallenge' " := choiceChallenge (in custom pack_type at level 2).
   Notation " 'chCommit' " := choiceMessage (in custom pack_type at level 2).
   Notation " 'chOpen' " := (chProd choiceChallenge choiceResponse) (in custom pack_type at level 2).
   Notation " 'chTranscript' " := choiceTranscript (in custom pack_type at level 2).
   Definition i_witness := #|Witness|.
+  Definition i_challenge := #|Challenge|.
   Definition RUN : nat := 0.
   Definition COM : nat := 1.
   Definition VER : nat := 2.
+  Definition HIDING : nat := 3.
 
   (* Commitment scheme specific *)
   Notation " 'chBool' " := 'fin #|bool_choiceType| (in custom pack_type at level 2).
-  Notation " 'chOpen' " := (chProd choiceTranscript choiceChallenge) (in custom pack_type at level 2).
+  Notation " 'chOpen' " := (chProd (chProd (chProd choiceStatement choiceWitness) 'option choiceTranscript) choiceChallenge) (in custom pack_type at level 2).
+  Notation " 'chRel' " := (chProd choiceStatement choiceWitness) (in custom pack_type at level 2).
 
+  Parameter Bool_pos : Positive #|bool_choiceType|.
+  #[local] Existing Instance Bool_pos.
 
 
   Local Open Scope package_scope.
 
-  Definition RUN_real (h : choiceStatement) (w : choiceWitness) :
+  Definition RUN_real:
     package fset0
       [interface]
-      [interface val #[ RUN ] : chChallenge → chTranscript] :=
+      [interface val #[ RUN ] : chInput → 'option chTranscript] :=
     [package
-     def #[ RUN ] (e: chChallenge) : chTranscript
+     def #[ RUN ] (hwe: chInput) : 'option chTranscript
       {
-        m ← Commit h w ;;
-        let '(a, s) := m in
-        z ← Response h w s a e ;;
-        ret (a,e,z)
+        let '(h,w,e) := hwe in
+        if (R (otf h) (otf w)) then
+          m ← Commit h w ;;
+          let '(a, s) := m in
+          z ← Response h w s a e ;;
+          ret (Some (a,e,z))
+        else ret None
       }
     ].
   
-  Definition RUN_ideal (h : choiceStatement):
+  Definition RUN_ideal:
     package fset0
       [interface]
-      [interface val #[ RUN ] : chChallenge → chTranscript] :=
+      [interface val #[ RUN ] : chInput → 'option chTranscript] :=
     [package
-     def #[ RUN ] (e: chChallenge) : chTranscript
+     def #[ RUN ] (hwe: chInput) : 'option chTranscript
       {
-        t ← Simulate h e ;;
-        ret t
+        let '(h, w, e) := hwe in
+        if (R (otf h) (otf w)) then
+          t ← Simulate h e ;;
+          ret (Some t)
+        else ret None
       }
     ].
   
-  Definition SHVZK h w :
-    loc_GamePair [interface val #[ RUN ] : chChallenge → chTranscript] :=
-    fun b => if b then {locpackage (RUN_ideal h)} else {locpackage (RUN_real h w)}.
+  Definition SHVZK:
+    loc_GamePair [interface val #[ RUN ] : chInput → 'option chTranscript] :=
+    fun b => if b then {locpackage RUN_ideal} else {locpackage RUN_real }.
 
-  Definition CommitmentScheme_SigmaProtocol:
+  Definition Sigma_to_Com:
     package fset0
-      [interface val #[ RUN ] : chChallenge → chTranscript]
-      [interface val #[ COM ] : chChallenge → chTranscript ;
+      [interface val #[ RUN ] : chInput → 'option chTranscript]
+      [interface val #[ COM ] : chRel → 'option chTranscript ;
                  val #[ VER ] : chOpen → chBool] :=
     [package
-     def #[ COM ] (e : chChallenge) : chTranscript
+     def #[ COM ] (hw : chRel) : 'option chTranscript
      {
-       #import {sig #[ RUN ] : chChallenge → chTranscript} as run ;;
-       t ← run e ;; ret t
+       #import {sig #[ RUN ] : chInput → 'option chTranscript} as run ;;
+       let '(h, w) := hw in
+       e ← sample uniform i_challenge ;;
+       t ← run (h,w,e) ;;
+       ret t
      }
      ;
-     def #[ VER ] (te : chOpen) : chBool
+     def #[ VER ] (hwte : chOpen) : chBool
      {
-       #import {sig #[ RUN ] : chChallenge → chTranscript} as run ;;
-       let '(t, e) := te in
-       t' ← run e ;;
-       ret (otf (t == t'))
+       #import {sig #[ RUN ] : chInput → 'option chTranscript} as run ;;
+       let '(h, w, opt_t, e) := hwte in
+       opt_t' ← run (h,w,e) ;;
+       match (opt_t, opt_t') with
+       | (Some t, Some t') => 
+         ret (fto (t == t'))
+       | _ => ret (fto false)
+       end
      } 
     ].
+
+  (* Commitment to input value*)
+  Definition Hiding_real :
+    package fset0
+      [interface val #[ COM ] : chRel → 'option chTranscript ;
+                 val #[ VER ] : chOpen → chBool] 
+      [interface val #[ HIDING ] : chRel → 'option chTranscript] :=
+    [package
+     def #[ HIDING ] (hw : chRel) : 'option chTranscript
+     {
+       #import {sig #[ COM ] : chRel → 'option chTranscript} as com ;;
+       t ← com hw ;;
+       ret t
+     }
+    ].
+             
+  (* Commitment to random value *)
+  Definition Hiding_ideal :
+    package fset0
+      [interface val #[ COM ] : chRel → 'option chTranscript ;
+                 val #[ VER ] : chOpen → chBool]
+      [interface val #[ HIDING ] : chRel → 'option chTranscript] :=
+    [package
+     def #[ HIDING ] (hw : chRel) : 'option chTranscript
+     {
+       #import {sig #[ COM ] : chRel → 'option chTranscript} as com ;;
+       let '(h, _) := hw in
+       w ← sample uniform i_witness ;;
+       t ← com (h,w) ;;
+       ret t
+     }
+    ].
+
+Theorem aux_hiding:
+  (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) ≈₀ (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true).
+Proof.
+  apply eq_rel_perf_ind_eq.
+  simplify_eq_rel hw.
+  ssprove_code_link_commute.
+  simplify_linking.
+Admitted.
+
+
+Theorem Commitment_Hiding :
+  ∀ LA A eps,
+    ValidPackage LA [interface val #[ HIDING ] : chRel → 'option chTranscript] A_export A →
+    (∀ A',
+      ValidPackage LA [interface val #[ RUN ] : chInput → 'option chTranscript] A_export A' →
+      Advantage SHVZK A' <= eps) →
+    AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK false) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK false) A <= eps + eps.
+Proof.
+  intros LA A eps Va Hadv.
+  pose proof (
+         Advantage_triangle_chain (Hiding_real ∘ Sigma_to_Com ∘ SHVZK false) [::
+           (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) ;
+           (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true)
+         ] (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK false) A
+       ) as ineq.
+  advantage_sum simpl in ineq.
+  rewrite !GRing.addrA in ineq.
+  apply: ler_trans. 1: exact ineq.
+  clear ineq.
+  rewrite aux_hiding.
+  2,3 : by rewrite !fdisjointUr fdisjoints0.
+  rewrite -!Advantage_link.
+  eapply ler_add. 
+  - have := Hadv (A ∘ Hiding_real ∘ Sigma_to_Com).
+    assert (ValidPackage LA [interface val #[RUN] : chInput → 'option (chTranscript) ] A_export (A ∘ Hiding_real ∘ Sigma_to_Com)).
+    + rewrite link_assoc.
+      have -> : LA = (LA :|: fset0) by rewrite fsetU0.
+      eapply valid_link with [interface val #[ COM ] : chRel → 'option chTranscript ;
+                                        val #[ VER ] : chOpen → chBool].
+      2 : { apply valid_package_from_class; intuition. }
+      have -> : LA = (LA :|: fset0) by rewrite fsetU0.
+      eapply valid_link with [interface val #[ HIDING ] : chRel → 'option chTranscript].
+      all : apply valid_package_from_class; intuition.
+    + move=> Hadv'.
+      apply Hadv' in H.
+      rewrite GRing.addr0 -link_assoc.
+      assumption.
+  - have := Hadv (A ∘ Hiding_ideal ∘ Sigma_to_Com).
+    assert (ValidPackage LA [interface val #[RUN] : chInput → 'option (chTranscript) ] A_export (A ∘ Hiding_ideal ∘ Sigma_to_Com)).
+    + rewrite link_assoc.
+      have -> : LA = (LA :|: fset0) by rewrite fsetU0.
+      eapply valid_link with [interface val #[ COM ] : chRel → 'option chTranscript ;
+                                        val #[ VER ] : chOpen → chBool].
+      2 : { apply valid_package_from_class; intuition. }
+      have -> : LA = (LA :|: fset0) by rewrite fsetU0.
+      eapply valid_link with [interface val #[ HIDING ] : chRel → 'option chTranscript].
+      all : apply valid_package_from_class; intuition.
+    + move=> Hadv'.
+      apply Hadv' in H.
+      rewrite -link_assoc.
+      rewrite Advantage_sym.
+      assumption.
+Qed.
 
 End SigmaProtocol.
