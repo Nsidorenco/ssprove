@@ -186,14 +186,12 @@ Qed.
 Lemma schnorr_SHVZK:
   ∀ LA A, 
     ValidPackage LA [interface val #[ RUN ] : chInput → 'option chTranscript] A_export A →
-    fdisjoint LA (SHVZK true).(locs) →
-    fdisjoint LA (SHVZK false).(locs) →
     Advantage SHVZK A = 0.
 Proof.
-  intros LA A Hvalid Hdis1 Hdis2.
+  intros LA A Hvalid. 
   rewrite Advantage_E.
   apply: eq_rel_perf_ind_eq.
-  2,3: assumption.
+  2,3: apply fdisjoints0.
   simplify_eq_rel hwe.
   ssprove_code_link_commute. simpl.
   simplify_linking.
@@ -227,20 +225,104 @@ Proof.
   - apply group_prodC.
 Qed.
 
+Lemma hiding_adv :
+  ∀ LA A,
+    ValidPackage LA [interface val #[ HIDING ] : chInput → 'option chMessage] A_export A →
+    aux_hiding A = 0.
+Proof.
+  intros LA A Va.
+  unfold aux_hiding.
+  apply: eq_rel_perf_ind_eq.
+  2,3 : rewrite ?fset0U; apply fdisjoints0. 
+  simplify_eq_rel hwe.
+  ssprove_code_link_commute. simpl.
+  simplify_linking.
+  destruct hwe as [[h w] e].
+  eapply r_uniform_bij.
+  1: { assert (bij_f : bijective (fun (e : choiceChallenge) => e)).
+       - exists id; done.
+       - exact bij_f. }
+  move=> e'.
+  case_eq (R (otf h) (otf w))=> rel.
+  - eapply r_bind with (λ '(b₀, s₀) '(b₁, s₁), match (b₀, b₁) with
+                                                 | (Some (a,_,_), Some(a',_,_)) => a' = a
+                                                 | _ => false
+                                               end ∧ s₀ = s₁ ).
+    1: eapply r_bind with (λ '(b₀, s₀) '(b₁, s₁),
+                                                  match (b₀, b₁) with
+                                                    | (Some (a,_,_), Some(a',_,_)) => a' = a
+                                                    | _ => false
+                                                  end ∧ s₀ = s₁ ).
+    + ssprove_same_head_r=> a.
+      apply r_ret.
+      move=> ???.
+      intuition.
+    + move=> a a'.
+      eapply r_ret.
+      move=> ???.
+      destruct a, a'; intuition.
+    + move=> a a'.
+      apply rpre_hypothesis_rule.
+      move=> s0 s1 [Ha Hs].
+      destruct a, a'.
+      ++ destruct s,s2.
+         destruct s,s2.
+         rewrite Ha.
+         apply r_ret.
+         intuition.
+         simpl in H0.
+         simpl in H1.
+         rewrite H0 H1.
+         apply Hs.
+      ++ destruct s,s2.
+         destruct s,s2.
+         exfalso. rewrite - boolp.falseE. assumption.
+      ++ exfalso; rewrite - boolp.falseE; assumption.
+      ++ exfalso; rewrite - boolp.falseE; assumption.
+  - eapply r_bind.
+    1: { apply r_ret.
+         intuition.
+         rewrite H.
+         intuition. }
+    move=> a a'.
+    apply rpre_hypothesis_rule=> s0 s1 H.
+    inversion H.
+    destruct a,a'.
+    + destruct s2.
+      destruct s2.
+      apply r_ret=> ?? [Hs1 Hs2].
+      intuition.
+      simpl in Hs1.
+      simpl in Hs2.
+      rewrite Hs1 Hs2.
+      reflexivity.
+    + apply r_ret=> ?? [Hs1 Hs2].
+      simpl in Hs1.
+      simpl in Hs2.
+      rewrite Hs1 Hs2.
+      intuition.
+    + inversion H1.
+    + apply r_ret=> ?? [Hs1 Hs2].
+      simpl in Hs1.
+      simpl in Hs2.
+      rewrite Hs1 Hs2.
+      intuition.
+Qed.
+
 Theorem schnorr_com_hiding :
   ∀ LA A,
-    ValidPackage LA [interface val #[ HIDING ] : chRel → 'option chTranscript] A_export A →
-    fdisjoint LA (SHVZK true).(locs) →
-    fdisjoint LA (SHVZK false).(locs) →
-    AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK false) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK false) A <= 0.
+    ValidPackage LA [interface val #[ HIDING ] : chInput → 'option chMessage] A_export A →
+    AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true) A <= 0.
 Proof.
-  intros LA A Va Hdis1 Hdis2.
-  have H := Commitment_Hiding LA A 0 Va.
+  intros LA A Va.
+  have H := commitment_hiding LA A 0 Va.
   rewrite GRing.addr0 in H.
-  have HS := schnorr_SHVZK _ _ _ Hdis1 Hdis2.
+  have HS := schnorr_SHVZK _ _ _.
+  rewrite hiding_adv in H.
+  rewrite GRing.addr0 in H.
   apply AdvantageE_le_0 in H.
   1: rewrite H; trivial.
   move=> A' Va'.
-  have -> := HS A' Va'.
+  have -> := HS LA A' Va'.
   trivial.
 Qed.
