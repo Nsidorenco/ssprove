@@ -49,6 +49,10 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
   Parameter Response_pos : Positive #|Response|.
   Parameter State_pos : Positive #|State|.
 
+  Definition Bool_pos : Positive #|bool_choiceType|.
+  Proof. rewrite card_bool. done. Qed.
+
+  #[local] Existing Instance Bool_pos.
   #[local] Existing Instance Statement_pos.
   #[local] Existing Instance Witness_pos.
   #[local] Existing Instance Message_pos.
@@ -71,6 +75,10 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
   Parameter Response :
     ∀ {L : {fset Location}} (h : choiceStatement) (w : choiceWitness) (s : choiceState) (a : choiceMessage) (e : choiceChallenge),
       code L [interface] choiceResponse.
+
+  Parameter Verify :
+    ∀ {L : {fset Location}} (h : choiceStatement) (a : choiceMessage) (e : choiceChallenge) (z : choiceResponse),
+      code L [interface] 'fin #|bool_choiceType|.
 
   Parameter Simulate :
     ∀ {L : {fset Location}} (h : choiceStatement) (e : choiceChallenge),
@@ -110,12 +118,8 @@ Module SigmaProtocol (π : SigmaProtocolParams)
 
   (* Commitment scheme specific *)
   Notation " 'chBool' " := 'fin #|bool_choiceType| (in custom pack_type at level 2).
-  Notation " 'chOpen' " := (chProd (chProd (chProd choiceStatement choiceWitness) 'option choiceTranscript) choiceChallenge) (in custom pack_type at level 2).
+  Notation " 'chOpen' " := (chProd choiceStatement 'option choiceTranscript) (in custom pack_type at level 2).
   Notation " 'chRel' " := (chProd choiceStatement choiceWitness) (in custom pack_type at level 2).
-
-  Definition Bool_pos : Positive #|bool_choiceType|.
-  Proof. rewrite card_bool. done. Qed.
-  #[local] Existing Instance Bool_pos.
 
   Definition i_challenge_pos : Positive i_challenge.
   Proof. unfold i_challenge. apply Challenge_pos. Qed.
@@ -160,11 +164,14 @@ Module SigmaProtocol (π : SigmaProtocolParams)
     loc_GamePair [interface val #[ RUN ] : chInput → 'option chTranscript] :=
     fun b => if b then {locpackage RUN_ideal} else {locpackage RUN_real }.
 
+  (* Type checking fails on this. *)
+  (* Most likely due to interface mismatch between Sigma_to_com and Verify. *)
+  (* Verify does not import any packages. So this should not be a problem? *)
   Definition Sigma_to_Com:
     package fset0
       [interface val #[ RUN ] : chInput → 'option chTranscript]
-      [interface val #[ COM ] : chInput → 'option chTranscript] :=
-                 (* val #[ VER ] : chOpen → chBool] := *)
+      [interface val #[ COM ] : chInput → 'option chTranscript ;
+                 val #[ VER ] : chOpen → chBool] :=
     [package
      def #[ COM ] (hwe : chInput) : 'option chTranscript
      {
@@ -172,20 +179,21 @@ Module SigmaProtocol (π : SigmaProtocolParams)
        t ← run hwe ;;
        ret t
      }
-     (* ; *)
-     (* def #[ VER ] (open : chOpen) : chBool *)
-     (* { *)
-     (*   #import {sig #[ VER ] : chOpen → chBool} as ver ;; *)
-     (*   b ← ver open ;; *)
-     (*   ret b *)
-     (* } *)
+     ;
+     def #[ VER ] (open : chOpen) : chBool
+     {
+       match open with
+         | (h, Some (a,e,z)) => Verify h a e z
+         | _ => ret (fto false)
+       end
+     }
     ].
 
   (* Commitment to input value*)
   Definition Hiding_real :
     package fset0
-      [interface val #[ COM ] : chInput → 'option chTranscript]
-                 (* val #[ VER ] : chOpen → chBool]  *)
+      [interface val #[ COM ] : chInput → 'option chTranscript ;
+                 val #[ VER ] : chOpen → chBool]
       [interface val #[ HIDING ] : chInput → 'option chMessage] :=
     [package
      def #[ HIDING ] (hwe : chInput) : 'option chMessage
@@ -203,8 +211,8 @@ Module SigmaProtocol (π : SigmaProtocolParams)
   (* Commitment to random value *)
   Definition Hiding_ideal :
     package fset0
-      [interface val #[ COM ] : chInput → 'option chTranscript]
-                 (* val #[ VER ] : chOpen → chBool] *)
+      [interface val #[ COM ] : chInput → 'option chTranscript ;
+                 val #[ VER ] : chOpen → chBool]
       [interface val #[ HIDING ] : chInput → 'option chMessage] :=
     [package
      def #[ HIDING ] (hwe : chInput) : 'option chMessage
@@ -220,100 +228,61 @@ Module SigmaProtocol (π : SigmaProtocolParams)
      }
     ].
 
-Definition aux_hiding A :=
-  AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK false) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK false) A.
-(* Proof. *)
-(*   apply eq_rel_perf_ind_eq. *)
-
-(*   rewrite !link_assoc. *)
-(*   (* set M := Sigma_to_Com ∘ SHVZK true. *) *)
-(*   unfold eq_up_to_inv. *)
-(*   move=> id S T x H. *)
-(*   rewrite rel_jdgE. *)
-(*   rewrite !get_op_default_link. *)
-(*   invert_interface_in H. *)
-(*   erewrite ?get_op_default_spec. *)
-(*   2,3: intuition. *)
-(*   destruct x as [[h w] x]. *)
-(*   rewrite -rel_jdgE. *)
-(*   cbn. *)
-(*   chUniverse_eqP_handle. *)
-(*   chUniverse_eqP_handle. *)
-(*   cbn. *)
-(*   chUniverse_eqP_handle. *)
-(*   chUniverse_eqP_handle. *)
-(*   cbn. *)
-(*   eapply r_uniform_bij. *)
-(*   1:{ pose f := fun (e : choiceChallenge) => e. *)
-(*       assert (bij_f : bijective f). *)
-(*       1: exists id; intro e; trivial.  *)
-(*       exact bij_f. } *)
-(*   move=> e. *)
-(*   case_eq (R (otf h) (otf w))=> rel. *)
-(*   1: { unfold Simulate. *)
-(*   1: { *)
-
-    
-(*        eapply rconst_samplerL. *)
-
-(*   simplify_eq_rel hw. *)
-(*   ssprove_code_link_commute. *)
-(*   simplify_linking. *)
-
-(* Admitted. *)
-
-
-Theorem commitment_hiding :
-  ∀ LA A eps,
-    ValidPackage LA [interface val #[ HIDING ] : chInput → 'option chMessage] A_export A →
-    (∀ A',
-      ValidPackage LA [interface val #[ RUN ] : chInput → 'option chTranscript] A_export A' →
-      Advantage SHVZK A' <= eps) →
-    AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true) A <= (aux_hiding A) + eps + eps.
-Proof.
-  intros LA A eps Va Hadv.
-  pose proof (
-         Advantage_triangle_chain (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) [::
-           (Hiding_real ∘ Sigma_to_Com ∘ SHVZK false) ;
-           (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK false)
-         ] (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true) A
-       ) as ineq.
-  advantage_sum simpl in ineq.
-  rewrite !GRing.addrA in ineq.
-  apply: ler_trans. 1: exact ineq.
-  clear ineq.
-  unfold aux_hiding.
-  (* 2,3 : by rewrite !fdisjointUr fdisjoints0. *)
-  rewrite -!Advantage_link.
-  eapply ler_add. 
-  1: rewrite GRing.addrC; eapply ler_add.
-  1: apply lerr.
-  - have := Hadv (A ∘ Hiding_real ∘ Sigma_to_Com).
-    assert (ValidPackage LA [interface val #[RUN] : chInput → 'option (chTranscript) ] A_export (A ∘ Hiding_real ∘ Sigma_to_Com)).
-    + rewrite link_assoc.
-      have -> : LA = (LA :|: fset0) by rewrite fsetU0.
-      eapply valid_link with [interface val #[ COM ] : chInput → 'option chTranscript].
-      2 : { apply valid_package_from_class; intuition. }
-      have -> : LA = (LA :|: fset0) by rewrite fsetU0.
-      eapply valid_link with [interface val #[ HIDING ] : chInput → 'option chMessage].
-      all : apply valid_package_from_class; intuition.
-    + move=> Hadv'.
-      apply Hadv' in H.
-      rewrite Advantage_sym -link_assoc.
-      assumption.
-  - have := Hadv (A ∘ Hiding_ideal ∘ Sigma_to_Com).
-    assert (ValidPackage LA [interface val #[RUN] : chInput → 'option (chTranscript) ] A_export (A ∘ Hiding_ideal ∘ Sigma_to_Com)).
-    + rewrite link_assoc.
-      have -> : LA = (LA :|: fset0) by rewrite fsetU0.
-      eapply valid_link with [interface val #[ COM ] : chInput → 'option chTranscript].
-      2 : { apply valid_package_from_class; intuition. }
-      have -> : LA = (LA :|: fset0) by rewrite fsetU0.
-      eapply valid_link with [interface val #[ HIDING ] : chInput → 'option chMessage].
-      all : apply valid_package_from_class; intuition.
-    + move=> Hadv'.
-      apply Hadv' in H.
-      rewrite -link_assoc.
-      assumption.
-Qed.
-
+  Definition aux_hiding A :=
+    AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK false) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK false) A.
+  
+  Theorem commitment_hiding :
+    ∀ LA A eps,
+      ValidPackage LA [interface val #[ HIDING ] : chInput → 'option chMessage] A_export A →
+      (∀ A',
+        ValidPackage LA [interface val #[ RUN ] : chInput → 'option chTranscript] A_export A' →
+        Advantage SHVZK A' <= eps) →
+      AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true) A <= (aux_hiding A) + eps + eps.
+  Proof.
+    intros LA A eps Va Hadv.
+    pose proof (
+           Advantage_triangle_chain (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) [::
+             (Hiding_real ∘ Sigma_to_Com ∘ SHVZK false) ;
+             (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK false)
+           ] (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true) A
+         ) as ineq.
+    advantage_sum simpl in ineq.
+    rewrite !GRing.addrA in ineq.
+    apply: ler_trans. 1: exact ineq.
+    clear ineq.
+    unfold aux_hiding.
+    (* 2,3 : by rewrite !fdisjointUr fdisjoints0. *)
+    rewrite -!Advantage_link.
+    eapply ler_add. 
+    1: rewrite GRing.addrC; eapply ler_add.
+    1: apply lerr.
+    - have := Hadv (A ∘ Hiding_real ∘ Sigma_to_Com).
+      assert (ValidPackage LA [interface val #[RUN] : chInput → 'option (chTranscript) ] A_export (A ∘ Hiding_real ∘ Sigma_to_Com)).
+      + rewrite link_assoc.
+        have -> : LA = (LA :|: fset0) by rewrite fsetU0.
+        eapply valid_link with [interface val #[ COM ] : chInput → 'option chTranscript ;
+                                          val #[ VER ] : chOpen → chBool].
+        2 : { apply valid_package_from_class; intuition. }
+        have -> : LA = (LA :|: fset0) by rewrite fsetU0.
+        eapply valid_link with [interface val #[ HIDING ] : chInput → 'option chMessage].
+        all : apply valid_package_from_class; intuition.
+      + move=> Hadv'.
+        apply Hadv' in H.
+        rewrite Advantage_sym -link_assoc.
+        assumption.
+    - have := Hadv (A ∘ Hiding_ideal ∘ Sigma_to_Com).
+      assert (ValidPackage LA [interface val #[RUN] : chInput → 'option (chTranscript) ] A_export (A ∘ Hiding_ideal ∘ Sigma_to_Com)).
+      + rewrite link_assoc.
+        have -> : LA = (LA :|: fset0) by rewrite fsetU0.
+        eapply valid_link with [interface val #[ COM ] : chInput → 'option chTranscript].
+        2 : { apply valid_package_from_class; intuition. }
+        have -> : LA = (LA :|: fset0) by rewrite fsetU0.
+        eapply valid_link with [interface val #[ HIDING ] : chInput → 'option chMessage].
+        all : apply valid_package_from_class; intuition.
+      + move=> Hadv'.
+        apply Hadv' in H.
+        rewrite -link_assoc.
+        assumption.
+  Qed.
+  
 End SigmaProtocol.
