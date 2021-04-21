@@ -48,7 +48,6 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
   Parameter Challenge_pos : Positive #|Challenge|.
   Parameter Response_pos : Positive #|Response|.
   Parameter State_pos : Positive #|State|.
-
   Definition Bool_pos : Positive #|bool_choiceType|.
   Proof. rewrite card_bool. done. Qed.
 
@@ -84,11 +83,16 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
     ∀ {L : {fset Location}} (h : choiceStatement) (e : choiceChallenge),
       code L [interface] choiceTranscript.
 
+  Parameter Extractor :
+    ∀ {L : {fset Location}} (h : choiceStatement) (a : choiceMessage)
+                            (e : choiceChallenge) (e' : choiceChallenge)
+                            (z : choiceResponse)  (z' : choiceResponse),
+      code L [interface] 'option choiceWitness.
+
   (*TODO: Add Challenge, Verify, and Extractor procedures. *)
 
   Notation " 'chStatement' " := choiceStatement (in custom pack_type at level 2).
   Notation " 'chMessage' " := choiceMessage (in custom pack_type at level 2).
-  Notation " 'chCommit' " := (chProd choiceMessage choiceState) (in custom pack_type at level 2).
   Notation " 'chResponse' " := choiceResponse (in custom pack_type at level 2).
   Notation " 'chFst' " :=
     (chProd (chProd choiceMessage choiceState) choiceChallenge)
@@ -107,24 +111,33 @@ Module SigmaProtocol (π : SigmaProtocolParams)
   Notation " 'chMessage' " := choiceMessage (in custom pack_type at level 2).
   Notation " 'chChallenge' " := choiceChallenge (in custom pack_type at level 2).
   Notation " 'chCommit' " := choiceMessage (in custom pack_type at level 2).
-  Notation " 'chOpen' " := (chProd choiceChallenge choiceResponse) (in custom pack_type at level 2).
   Notation " 'chTranscript' " := choiceTranscript (in custom pack_type at level 2).
+  Notation " 'chSoundness' " := (chProd choiceStatement
+                                  (chProd choiceMessage
+                                    (chProd (chProd choiceChallenge choiceChallenge)
+                                            (chProd choiceResponse choiceResponse)))) (in custom pack_type at level 2).
   Definition i_witness := #|Witness|.
   Definition i_challenge := #|Challenge|.
   Definition RUN : nat := 0.
   Definition COM : nat := 1.
   Definition VER : nat := 2.
-  Definition HIDING : nat := 3.
+  Definition EXTRACT : nat := 3.
+  Definition HIDING : nat := 4.
+  Definition BINDING : nat := 5.
 
   (* Commitment scheme specific *)
   Notation " 'chBool' " := 'fin #|bool_choiceType| (in custom pack_type at level 2).
   Notation " 'chOpen' " := (chProd choiceStatement 'option choiceTranscript) (in custom pack_type at level 2).
   Notation " 'chRel' " := (chProd choiceStatement choiceWitness) (in custom pack_type at level 2).
+  Notation " 'chBinding' " := (chProd choiceStatement (chProd choiceTranscript choiceTranscript)) (in custom pack_type at level 2).
 
   Definition i_challenge_pos : Positive i_challenge.
   Proof. unfold i_challenge. apply Challenge_pos. Qed.
   #[local] Existing Instance i_challenge_pos.
 
+  Definition Bool_pos : Positive #|bool_choiceType|.
+  Proof. rewrite card_bool. done. Qed.
+  #[local] Existing Instance Bool_pos.
 
   Local Open Scope package_scope.
 
@@ -167,6 +180,18 @@ Module SigmaProtocol (π : SigmaProtocolParams)
   (* Type checking fails on this. *)
   (* Most likely due to interface mismatch between Sigma_to_com and Verify. *)
   (* Verify does not import any packages. So this should not be a problem? *)
+  Definition Verify' :
+    ∀ (h : choiceStatement) (a : choiceMessage) (e : choiceChallenge) (z : choiceResponse),
+      code fset0 [interface val #[ RUN ] : chInput → 'option chTranscript] 'fin #|bool_choiceType|.
+  Proof.
+    intros h a e z.
+    have H := @Verify fset0 h a e z.
+    eapply mkprog with H.
+    eapply valid_injectMap.
+    2: apply H.
+    apply fsub0set. 
+  Defined.
+
   Definition Sigma_to_Com:
     package fset0
       [interface val #[ RUN ] : chInput → 'option chTranscript]
@@ -183,7 +208,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
      def #[ VER ] (open : chOpen) : chBool
      {
        match open with
-         | (h, Some (a,e,z)) => Verify h a e z
+         | (h, Some (a,e,z)) => Verify' h a e z
          | _ => ret (fto false)
        end
      }
@@ -274,7 +299,8 @@ Module SigmaProtocol (π : SigmaProtocolParams)
       assert (ValidPackage LA [interface val #[RUN] : chInput → 'option (chTranscript) ] A_export (A ∘ Hiding_ideal ∘ Sigma_to_Com)).
       + rewrite link_assoc.
         have -> : LA = (LA :|: fset0) by rewrite fsetU0.
-        eapply valid_link with [interface val #[ COM ] : chInput → 'option chTranscript].
+        eapply valid_link with [interface val #[ COM ] : chInput → 'option chTranscript ;
+                                          val #[ VER ] : chOpen → chBool].
         2 : { apply valid_package_from_class; intuition. }
         have -> : LA = (LA :|: fset0) by rewrite fsetU0.
         eapply valid_link with [interface val #[ HIDING ] : chInput → 'option chMessage].
@@ -284,5 +310,52 @@ Module SigmaProtocol (π : SigmaProtocolParams)
         rewrite -link_assoc.
         assumption.
   Qed.
+
+  Definition SpecialSoundness:
+    package fset0
+      [interface]
+      [interface val #[ EXTRACT ] : chSoundness → chBool] :=
+    [package
+     def #[ EXTRACT ] (input: chSoundness) : chBool
+      {
+        let '(h,tmp1) := input in
+        let '(a,tmp2) := tmp1 in
+        let '(es,zs) := tmp2 in
+        let '(e, e') := es in
+        let '(z, z') := zs in
+        v1 ← Verify h a e z ;;
+        v2 ← Verify h a e' z' ;;
+        if (andb (otf v1) (otf v2)) then
+            w_opt ← Extractor h a e e' z z';;
+            match w_opt with
+            | Some w => ret (fto (R (otf h) (otf w)))
+            | None => ret (fto false)
+            end
+        else ret (fto false)
+      }
+    ].
+
+  Definition Com_Binding:
+    package fset0
+      [interface val #[ COM ] : chInput → 'option chTranscript ;
+                 val #[ VER ] : chOpen → chBool]
+      [interface val #[ BINDING ] : chBinding → chBool] :=
+    [package
+     def #[ BINDING ] (input: chBinding) : chBool
+      {
+        #import {sig #[ VER ] : chOpen → chBool} as ver ;;
+        let '(h, tmp) := input in
+        let '(c1, c2) := tmp in
+        let '(a, e, z) := c1 in
+        let '(a', e', z') := c2 in
+        v1 ← ver (h, Some c1) ;;
+        v2 ← ver (h, Some c2) ;;
+        ret (fto (andb (e != e') (andb (otf v1) (otf v2))))
+      }
+    ].
+
+  (* Binding security: *)
+  (* Show that Com_Binding can be used to construct A' s.t. A' = Special Soundness *)
+  (* Or, show that Com_binding = L ° Special Soundness *)
   
 End SigmaProtocol.
