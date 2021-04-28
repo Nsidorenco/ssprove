@@ -154,6 +154,21 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
        ret (fto (g ^+ (otf z) * (otf h ^- (otf e))), e, z)
     }.
 
+  #[local] Existing Instance Bool_pos.
+  Definition Verify {L : {fset Location}} (h : choiceStatement) (a : choiceMessage) (e : choiceChallenge) (z : choiceResponse):
+    code L [interface] 'fin #|bool_choiceType| :=
+    {code
+       ret (fto true)
+    }.
+
+  Definition Extractor {L : {fset Location}} (h : choiceStatement) (a : choiceMessage)
+                                             (e : choiceChallenge) (e' : choiceChallenge)
+                                             (z : choiceResponse)  (z' : choiceResponse) :
+      code L [interface] ('option choiceWitness) :=
+    {code
+       ret None
+    }.
+
 End MyAlg.
 
 Local Open Scope package_scope.
@@ -193,8 +208,6 @@ Proof.
   apply: eq_rel_perf_ind_eq.
   2,3: apply fdisjoints0.
   simplify_eq_rel hwe.
-  ssprove_code_link_commute. simpl.
-  simplify_linking.
   (* Programming logic part *)
   destruct hwe as [[statement witness] challenge].
   case_eq (R (otf statement) (otf witness)).
@@ -210,7 +223,7 @@ Proof.
   (* Ambient logic proof of post condition *)
   intros s0 s1 Hs.
   unfold f.
-  rewrite - !expgnE rel.
+  rewrite rel.
   split.
   2: apply Hs. 
   simpl.
@@ -221,8 +234,10 @@ Proof.
   rewrite expg_mod.
   2 : rewrite order_ge1; apply expg_order.
   rewrite -expgM -expgMn.
-  - rewrite mulgV expg1n mul1g Zp_mulC. reflexivity.
-  - apply group_prodC.
+  2: apply group_prodC.
+  rewrite mulgV expg1n mul1g.
+  cbn. rewrite Zp_mulC.
+  reflexivity.
 Qed.
 
 Lemma hiding_adv :
@@ -235,14 +250,15 @@ Proof.
   apply: eq_rel_perf_ind_eq.
   2,3 : rewrite ?fset0U; apply fdisjoints0. 
   simplify_eq_rel hwe.
-  ssprove_code_link_commute. simpl.
   simplify_linking.
+  ssprove_code_simpl.
   destruct hwe as [[h w] e].
   eapply r_uniform_bij.
   1: { assert (bij_f : bijective (fun (e : choiceChallenge) => e)).
        - exists id; done.
        - exact bij_f. }
   move=> e'.
+  rewrite !cast_fun_K.
   case_eq (R (otf h) (otf w))=> rel.
   - eapply r_bind with (λ '(b₀, s₀) '(b₁, s₁), match (b₀, b₁) with
                                                  | (Some (a,_,_), Some(a',_,_)) => a' = a
@@ -268,45 +284,38 @@ Proof.
       ++ destruct s,s2.
          destruct s,s2.
          rewrite Ha.
-         apply r_ret.
-         intuition.
-         simpl in H0.
-         simpl in H1.
-         rewrite H0 H1.
-         apply Hs.
+         apply r_ret=>?? Hs0. 
+         inversion Hs0.
+         simpl in H, H0.
+         rewrite H H0 Hs.
+         split; reflexivity.
       ++ destruct s,s2.
          destruct s,s2.
          exfalso. rewrite - boolp.falseE. assumption.
       ++ exfalso; rewrite - boolp.falseE; assumption.
       ++ exfalso; rewrite - boolp.falseE; assumption.
-  - eapply r_bind.
-    1: { apply r_ret.
-         intuition.
-         rewrite H.
-         intuition. }
+  - eapply r_bind with (λ '(b₀, s₀) '(b₁, s₁), b₀ =  b₁ /\ s₀ = s₁).
+    1: { apply r_ret=>?? ->.
+         split; reflexivity. }
     move=> a a'.
     apply rpre_hypothesis_rule=> s0 s1 H.
     inversion H.
     destruct a,a'.
-    + destruct s2.
+    + destruct s.
+      destruct s2.
+      destruct s.
       destruct s2.
       apply r_ret=> ?? [Hs1 Hs2].
-      intuition.
-      simpl in Hs1.
-      simpl in Hs2.
-      rewrite Hs1 Hs2.
-      reflexivity.
+      inversion H0.
+      simpl in Hs1, Hs2.
+      rewrite Hs1 Hs2 H1.
+      split; reflexivity.
+    + inversion H0.
+    + inversion H0.
     + apply r_ret=> ?? [Hs1 Hs2].
-      simpl in Hs1.
-      simpl in Hs2.
-      rewrite Hs1 Hs2.
-      intuition.
-    + inversion H1.
-    + apply r_ret=> ?? [Hs1 Hs2].
-      simpl in Hs1.
-      simpl in Hs2.
-      rewrite Hs1 Hs2.
-      intuition.
+      simpl in Hs1, Hs2.
+      rewrite Hs1 Hs2 H1.
+      split; reflexivity.
 Qed.
 
 Theorem schnorr_com_hiding :
