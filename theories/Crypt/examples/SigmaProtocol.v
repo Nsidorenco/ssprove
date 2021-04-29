@@ -331,7 +331,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
     apply fsub0set. 
   Defined.
 
-  Definition Special_Soundness:
+  Definition Special_Soundness_f:
     package fset0
       [interface val #[ ADV ] : chStatement → chBinding]
       [interface val #[ SOUNDNESS ] : chStatement → chBool] :=
@@ -355,6 +355,29 @@ Module SigmaProtocol (π : SigmaProtocolParams)
       }
     ].
 
+  Definition Special_Soundness_t:
+    package fset0
+      [interface val #[ ADV ] : chStatement → chBinding]
+      [interface val #[ SOUNDNESS ] : chStatement → chBool] :=
+    [package
+     def #[ SOUNDNESS ] (h : chStatement) : chBool
+      {
+        #import {sig #[ ADV ] : chStatement → chBinding} as A ;;
+        '(a, tmp) ← A(h) ;;
+        let '(c1, c2) := tmp in
+        let '(e, z) := c1 in
+        let '(e', z') := c2 in
+        v1 ← Verify' h a e z ;;
+        v2 ← Verify' h a e' z' ;;
+        if (andb (e != e') (andb (otf v1) (otf v2))) then
+            w_opt ← Extractor' h a e e' z z';;
+            ret (fto true)
+        else ret (fto false)
+      }
+    ].
+
+  Definition ɛ_soundness A Adv := AdvantageE (Special_Soundness_t ∘ Adv) (Special_Soundness_f ∘ Adv) A.
+
   Definition Com_Binding:
     package fset0
       [interface val #[ ADV ] : chStatement → chBinding]
@@ -374,8 +397,8 @@ Module SigmaProtocol (π : SigmaProtocolParams)
     ].
 
   Instance Valid_Com {LA} {A}
-    `{ValidPackage LA Game_import [interface val #[ ADV ] : chStatement → chBinding] A}
-    : ValidPackage LA Game_import [interface val #[ SOUNDNESS ] : chStatement → chBool] (Com_Binding ∘ A).
+    `{ValidPackage LA [interface] [interface val #[ ADV ] : chStatement → chBinding] A}
+    : ValidPackage LA [interface] [interface val #[ SOUNDNESS ] : chStatement → chBool] (Com_Binding ∘ A).
   Proof.
     have -> : LA = (fset0 :|: LA) by rewrite fset0U.
     eapply valid_link with [interface val #[ADV] : chStatement → chBinding ].
@@ -386,17 +409,31 @@ Module SigmaProtocol (π : SigmaProtocolParams)
   Lemma binding:
     ∀ LA A LAdv Adv,
       ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
-      ValidPackage LAdv Game_import [interface val #[ ADV ] : chStatement → chBinding] Adv →
-      AdvantageE (Com_Binding ∘ Adv) (Special_Soundness ∘ Adv) A = 0.
+      ValidPackage LAdv [interface] [interface val #[ ADV ] : chStatement → chBinding] Adv →
+      AdvantageE (Com_Binding ∘ Adv) (Special_Soundness_f ∘ Adv) A <= (ɛ_soundness A Adv).
     intros LA A LAdv Adv VA VAdv.
+    pose proof (
+           Advantage_triangle_chain (Com_Binding ∘ Adv) [::
+             (Special_Soundness_t ∘ Adv)
+           ] (Special_Soundness_f ∘ Adv) A
+         ) as ineq.
+    advantage_sum simpl in ineq.
+    apply: ler_trans. 1: exact ineq.
+    clear ineq.
+    unfold ɛ_soundness. 
+    rewrite ger_addr.
+
+    have Hadv : AdvantageE (Com_Binding ∘ Adv) (Special_Soundness_t ∘ Adv) A = 0.
+    2: rewrite Hadv; apply lerr.
+
     eapply eq_rel_perf_ind_eq.  
     5,6: apply fdisjoints0.
     4: apply VA.
     1,2: intuition.
     simplify_eq_rel h.
     ssprove_code_simpl.
-    (* rewrite rel_jdgE. *)
-    (* eapply some_lemma_for_prove_relational. *)
+    simpl code_link.
+    
   Admitted.
 
 End SigmaProtocol.
