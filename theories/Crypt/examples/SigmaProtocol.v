@@ -410,8 +410,9 @@ Module SigmaProtocol (π : SigmaProtocolParams)
     ∀ LA A LAdv Adv,
       ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
       ValidPackage LAdv [interface] [interface val #[ ADV ] : chStatement → chBinding] Adv →
+      fdisjoint LA LAdv →
       AdvantageE (Com_Binding ∘ Adv) (Special_Soundness_f ∘ Adv) A <= (ɛ_soundness A Adv).
-    intros LA A LAdv Adv VA VAdv.
+    intros LA A LAdv Adv VA VAdv Hdisj.
     pose proof (
            Advantage_triangle_chain (Com_Binding ∘ Adv) [::
              (Special_Soundness_t ∘ Adv)
@@ -423,16 +424,45 @@ Module SigmaProtocol (π : SigmaProtocolParams)
     unfold ɛ_soundness. 
     rewrite ger_addr.
 
-    have Hadv : AdvantageE (Com_Binding ∘ Adv) (Special_Soundness_t ∘ Adv) A = 0.
-    2: rewrite Hadv; apply lerr.
+    assert (AdvantageE (Com_Binding ∘ Adv) (Special_Soundness_t ∘ Adv) A = 0) as ɛ_Adv.
+    2: rewrite ɛ_Adv; apply lerr.
 
     eapply eq_rel_perf_ind_eq.  
-    5,6: apply fdisjoints0.
     4: apply VA.
-    1,2: intuition.
+    1,2: eapply valid_link; last first; [apply VAdv | trivial].
+    4,5: erewrite fset0U; apply Hdisj.
+    1: apply Com_Binding.
+    1: apply Special_Soundness_t.
+
+    erewrite <- ?code_link_ext.
     simplify_eq_rel h.
     ssprove_code_simpl.
-    simpl code_link.
+
+    erewrite <- ?code_link_ext.
+    2,5: apply hin.
+    2: { instantiate (1 := Special_Soundness_t).
+         lookup_op_squeeze.
+         f_equal.
+         admit. }
+    3: { instantiate (1 := Com_Binding).
+         lookup_op_squeeze.
+         f_equal.
+         admit. }
+    2: { lookup_op_squeeze.
+         reflexivity.
+         instantiate (1 := f).
+         admit. }
+    2: { lookup_op_squeeze.
+         instantiate (1 := f0).
+         admit. }
+
+    
+    
+
+
+    subst f.
+    rewrite rew_const H0.
+    
     
   Admitted.
 
