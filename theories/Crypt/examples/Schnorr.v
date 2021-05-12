@@ -121,7 +121,11 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
   Definition Challenge_pos : Positive #|Challenge| := _.
   Definition Response_pos : Positive #|Response| := _.
   Definition State_pos : Positive #|State| := _.
-  
+  Definition Bool_pos : Positive #|bool_choiceType|.
+  Proof.
+    rewrite card_bool. done.
+  Defined.
+
   Definition choiceWitness : chUniverse := 'fin #|Witness|.
   Definition choiceStatement : chUniverse := 'fin #|Statement|.
   Definition choiceMessage : chUniverse := 'fin #|Message|.
@@ -129,10 +133,12 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
   Definition choiceResponse : chUniverse := 'fin #|Response|.
   Definition choiceTranscript : chUniverse := chProd (chProd choiceMessage choiceChallenge) choiceResponse.
   Definition choiceState := 'fin #|State|.
+  Definition choiceBool := 'fin #|bool_choiceType|.
 
   Definition i_witness := #|Witness|.
 
   Definition HIDING : nat := 0.
+  Definition SOUNDNESS : nat := 1.
 
   Definition Commit {L : {fset Location}} (h : choiceStatement) (w : choiceWitness):
     code L [interface] (choiceMessage × choiceState) :=
@@ -154,11 +160,10 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
        ret (fto (g ^+ (otf z) * (otf h ^- (otf e))), e, z)
     }.
 
-  #[local] Existing Instance Bool_pos.
   Definition Verify {L : {fset Location}} (h : choiceStatement) (a : choiceMessage) (e : choiceChallenge) (z : choiceResponse):
-    code L [interface] 'fin #|bool_choiceType| :=
+    code L [interface] choiceBool :=
     {code
-       ret (fto true)
+       ret (fto (g ^+ (otf z) == (otf a) * (otf h) ^+ (otf e)))
     }.
 
   Definition Extractor {L : {fset Location}} (h : choiceStatement) (a : choiceMessage)
@@ -166,7 +171,7 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
                                              (z : choiceResponse)  (z' : choiceResponse) :
       code L [interface] ('option choiceWitness) :=
     {code
-       ret None
+       ret (Some (fto (invg(((otf z) - (otf z')) * ((otf e)-(otf e'))))))
     }.
 
 End MyAlg.
@@ -239,6 +244,19 @@ Proof.
   cbn. rewrite Zp_mulC.
   reflexivity.
 Qed.
+
+Set Typeclasses Debug.
+
+Lemma schnorr_soundness:
+  ∀ LA A Adv,
+    ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
+    ɛ_soundness A Adv= 0.
+Proof.
+  intros A Adv.
+  unfold ɛ_soundness.
+  apply: eq_rel_perf_ind_eq.
+
+Admitted.
 
 Lemma hiding_adv :
   ∀ LA A,

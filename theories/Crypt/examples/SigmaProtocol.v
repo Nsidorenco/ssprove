@@ -36,9 +36,6 @@ Module Type SigmaProtocolParams.
 
 End SigmaProtocolParams.
 
-Definition Bool_pos : Positive #|bool_choiceType|.
-Proof. rewrite card_bool. done. Qed.
-
 Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
 
   Import π.
@@ -51,6 +48,7 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
   Parameter Challenge_pos : Positive #|Challenge|.
   Parameter Response_pos : Positive #|Response|.
   Parameter State_pos : Positive #|State|.
+  Parameter Bool_pos : Positive #|bool_choiceType|.
 
   #[local] Existing Instance Bool_pos.
   #[local] Existing Instance Statement_pos.
@@ -67,6 +65,7 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
   Definition choiceResponse : chUniverse := 'fin #|Response|.
   Definition choiceTranscript : chUniverse := chProd (chProd choiceMessage choiceChallenge) choiceResponse.
   Definition choiceState := 'fin #|State|.
+  Definition choiceBool := 'fin #|bool_choiceType|.
 
   Parameter Commit :
     ∀ {L : {fset Location}} (h : choiceStatement) (w : choiceWitness),
@@ -78,7 +77,7 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
 
   Parameter Verify :
     ∀ {L : {fset Location}} (h : choiceStatement) (a : choiceMessage) (e : choiceChallenge) (z : choiceResponse),
-      code L [interface] 'fin #|bool_choiceType|.
+      code L [interface] choiceBool.
 
   Parameter Simulate :
     ∀ {L : {fset Location}} (h : choiceStatement) (e : choiceChallenge),
@@ -128,7 +127,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
   Definition ADV : nat := 5.
 
   (* Commitment scheme specific *)
-  Notation " 'chBool' " := 'fin #|bool_choiceType| (in custom pack_type at level 2).
+  Notation " 'chBool' " := choiceBool (in custom pack_type at level 2).
   Notation " 'chOpen' " := (chProd choiceStatement 'option choiceTranscript) (in custom pack_type at level 2).
   Notation " 'chRel' " := (chProd choiceStatement choiceWitness) (in custom pack_type at level 2).
 
@@ -140,10 +139,6 @@ Module SigmaProtocol (π : SigmaProtocolParams)
   Definition i_challenge_pos : Positive i_challenge.
   Proof. unfold i_challenge. apply Challenge_pos. Qed.
   #[local] Existing Instance i_challenge_pos.
-
-  Definition Bool_pos : Positive #|bool_choiceType|.
-  Proof. rewrite card_bool. done. Qed.
-  #[local] Existing Instance Bool_pos.
 
   Local Open Scope package_scope.
 
@@ -188,7 +183,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
   (* Verify does not import any packages. So this should not be a problem? *)
   Definition Verify' :
     ∀ {L} (h : choiceStatement) (a : choiceMessage) (e : choiceChallenge) (z : choiceResponse),
-      code fset0 L 'fin #|bool_choiceType|.
+      code fset0 L choiceBool.
   Proof.
     intros L h a e z.
     have H := @Verify fset0 h a e z.
@@ -363,7 +358,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
      def #[ SOUNDNESS ] (h : chStatement) : chBool
       {
         #import {sig #[ ADV ] : chStatement → chBinding} as A ;;
-        '(a, tmp) ← A(h) ;;
+        '(a, tmp) ← A h ;;
         let '(c1, c2) := tmp in
         let '(e, z) := c1 in
         let '(e', z') := c2 in
@@ -434,36 +429,9 @@ Module SigmaProtocol (π : SigmaProtocolParams)
     1: apply Com_Binding.
     1: apply Special_Soundness_t.
 
-    erewrite <- ?code_link_ext.
     simplify_eq_rel h.
     ssprove_code_simpl.
-
-    erewrite <- ?code_link_ext.
-    2,5: apply hin.
-    2: { instantiate (1 := Special_Soundness_t).
-         lookup_op_squeeze.
-         f_equal.
-         admit. }
-    3: { instantiate (1 := Com_Binding).
-         lookup_op_squeeze.
-         f_equal.
-         admit. }
-    2: { lookup_op_squeeze.
-         reflexivity.
-         instantiate (1 := f).
-         admit. }
-    2: { lookup_op_squeeze.
-         instantiate (1 := f0).
-         admit. }
-
-    
-    
-
-
-    subst f.
-    rewrite rew_const H0.
-    
-    
+    (* TODO: this does not simplify *)
   Admitted.
 
 End SigmaProtocol.
