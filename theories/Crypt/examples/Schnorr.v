@@ -126,6 +126,8 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
     rewrite card_bool. done.
   Defined.
 
+  #[local] Existing Instance Bool_pos.
+
   Definition choiceWitness : chUniverse := 'fin #|Witness|.
   Definition choiceStatement : chUniverse := 'fin #|Statement|.
   Definition choiceMessage : chUniverse := 'fin #|Message|.
@@ -166,13 +168,10 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
        ret (fto (g ^+ (otf z) == (otf a) * (otf h) ^+ (otf e)))
     }.
 
-  Definition Extractor {L : {fset Location}} (h : choiceStatement) (a : choiceMessage)
-                                             (e : choiceChallenge) (e' : choiceChallenge)
-                                             (z : choiceResponse)  (z' : choiceResponse) :
-      code L [interface] ('option choiceWitness) :=
-    {code
-       ret (Some (fto (invg(((otf z) - (otf z')) * ((otf e)-(otf e'))))))
-    }.
+  Definition Extractor (h : choiceStatement) (a : choiceMessage)
+                       (e : choiceChallenge) (e' : choiceChallenge)
+                       (z : choiceResponse)  (z' : choiceResponse) : 'option choiceWitness :=
+    Some (fto (invg(((otf z) - (otf z')) * ((otf e)-(otf e'))))).
 
 End MyAlg.
 
@@ -245,14 +244,12 @@ Proof.
   reflexivity.
 Qed.
 
-Set Typeclasses Debug.
-
 Lemma schnorr_soundness:
   ∀ LA A Adv,
     ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
     ɛ_soundness A Adv= 0.
 Proof.
-  intros A Adv.
+  intros LA A Adv HVa.
   unfold ɛ_soundness.
   apply: eq_rel_perf_ind_eq.
 
