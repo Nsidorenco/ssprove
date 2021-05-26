@@ -142,28 +142,31 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
   Definition HIDING : nat := 0.
   Definition SOUNDNESS : nat := 1.
 
-  Definition Commit {L : {fset Location}} (h : choiceStatement) (w : choiceWitness):
-    code L [interface] (choiceMessage × choiceState) :=
+  Definition Sigma_locs : {fset Location} := fset0.
+  Definition Simulator_locs : {fset Location} := fset0.
+
+  Definition Commit (h : choiceStatement) (w : choiceWitness):
+    code Sigma_locs [interface] (choiceMessage × choiceState) :=
     {code
        r ← sample uniform i_witness ;;
        ret (fto (g ^+ otf r), r)
     }.
 
-  Definition Response {L : {fset Location}} (h : choiceStatement) (w : choiceWitness) (r : choiceState) (a : choiceMessage) (e : choiceChallenge):
-    code L [interface] choiceResponse :=
+  Definition Response (h : choiceStatement) (w : choiceWitness) (r : choiceState) (a : choiceMessage) (e : choiceChallenge):
+    code Sigma_locs [interface] choiceResponse :=
     {code
        ret (fto (otf r + otf e * otf w))
     }.
 
-  Definition Simulate {L : {fset Location}} (h : choiceStatement) (e : choiceChallenge):
-    code L [interface] choiceTranscript :=
+  Definition Simulate (h : choiceStatement) (e : choiceChallenge):
+    code Simulator_locs [interface] choiceTranscript :=
     {code
        z ← sample uniform i_witness ;;
        ret (fto (g ^+ (otf z) * (otf h ^- (otf e))), e, z)
     }.
 
-  Definition Verify {L : {fset Location}} (h : choiceStatement) (a : choiceMessage) (e : choiceChallenge) (z : choiceResponse):
-    code L [interface] choiceBool :=
+  Definition Verify (h : choiceStatement) (a : choiceMessage) (e : choiceChallenge) (z : choiceResponse):
+    code Sigma_locs [interface] choiceBool :=
     {code
        ret (fto (g ^+ (otf z) == (otf a) * (otf h) ^+ (otf e)))
     }.
@@ -284,7 +287,7 @@ Proof.
                                                     | (Some (a,_,_), Some(a',_,_)) => a' = a
                                                     | _ => false
                                                   end ∧ s₀ = s₁ ).
-    + ssprove_same_head_r=> a.
+    + ssprove_sync_eq=> a.
       apply r_ret.
       move=> ???.
       intuition.
@@ -347,6 +350,75 @@ Proof.
   apply AdvantageE_le_0 in H.
   1: rewrite H; trivial.
   move=> A' Va'.
-  have -> := HS LA A' Va'.
+  have -> := HS (LA :|: Sigma_locs) A' Va'.
   trivial.
+Qed.
+
+Lemma extractor_success:
+  ∀ LA A LAdv Adv,
+    ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
+    ValidPackage LAdv [interface] [interface val #[ ADV ] : chStatement → chBinding] Adv →
+    fdisjoint LA (Sigma_locs :|: LAdv) →
+    ɛ_soundness A Adv = 0.
+Proof.
+  intros LA A LAdv Adv VA VAdv Hdisj.
+  apply: eq_rel_perf_ind_eq.
+  2,3: apply Hdisj.
+
+  simplify_eq_rel h.
+  destruct (Adv ADV).
+  1: destruct t, s; repeat destruct (chUniverse_eqP).
+  2-4: apply r_ret; auto.
+  apply rsame_head=> run.
+  rewrite !code_link_scheme.
+  destruct run, s0, s0, s1.
+
+  match goal with
+      | [ |- context[if ?b then _ else _]] => case b eqn:rel
+  end.
+
+  2: apply r_ret; auto.
+
+  apply r_ret.
+  intros ?? s_eq.
+  split; [| apply s_eq].
+
+  unfold R.
+  unfold "&&" in rel.
+  inversion rel.
+
+  repeat match goal with
+      | [ |- context[if ?b then _ else _]] => case b eqn:?
+  end.
+  2,3: discriminate.
+
+  rewrite otf_fto in Heqs4.
+  rewrite otf_fto in rel.
+
+  apply reflection_nonsense in rel.
+  apply reflection_nonsense in Heqs4.
+
+  rewrite H0.
+
+  rewrite otf_fto expg_mod.
+Admitted.
+
+
+
+
+
+
+Theorem schnorr_com_binding:
+  ∀ LA A LAdv Adv,
+    ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
+    ValidPackage LAdv [interface] [interface val #[ ADV ] : chStatement → chBinding] Adv →
+    fdisjoint LA (Sigma_locs :|: LAdv) →
+    AdvantageE (Com_Binding ∘ Adv) (Special_Soundness_f ∘ Adv) A <= 0.
+Proof.
+  intros LA A LAdv Adv VA VAdv Hdisj.
+  have H := binding LA A LAdv Adv VA VAdv Hdisj.
+
+  rewrite extractor_success in H.
+  - apply H.
+  - apply Hdisj.
 Qed.

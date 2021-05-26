@@ -68,6 +68,7 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
   Definition choiceBool := 'fin #|bool_choiceType|.
 
   Parameter Sigma_locs : {fset Location}.
+  Parameter Simulator_locs : {fset Location}.
 
   Parameter Commit :
     ∀ (h : choiceStatement) (w : choiceWitness),
@@ -82,8 +83,8 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
       code Sigma_locs [interface] choiceBool.
 
   Parameter Simulate :
-    ∀ {L : {fset Location}} (h : choiceStatement) (e : choiceChallenge),
-      code L [interface] choiceTranscript.
+    ∀ (h : choiceStatement) (e : choiceChallenge),
+      code Simulator_locs [interface] choiceTranscript.
 
   Parameter Extractor :
     ∀ (h : choiceStatement) (a : choiceMessage)
@@ -161,7 +162,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
     ].
   
   Definition RUN_ideal:
-    package Sigma_locs
+    package Simulator_locs
       [interface]
       [interface val #[ RUN ] : chInput → 'option chTranscript] :=
     [package
@@ -268,14 +269,11 @@ Module SigmaProtocol (π : SigmaProtocolParams)
       AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true) A <= (aux_hiding A) + eps + eps.
   Proof.
     intros LA A eps Va Hadv.
-    pose proof (
-           Advantage_triangle_chain (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) [::
+    ssprove triangle (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) [::
              (Hiding_real ∘ Sigma_to_Com ∘ SHVZK false) ;
              (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK false)
            ] (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true) A
-         ) as ineq.
-    advantage_sum simpl in ineq.
-    rewrite !GRing.addrA in ineq.
+      as ineq.
     apply: ler_trans. 1: exact ineq.
     clear ineq.
     unfold aux_hiding.
@@ -392,14 +390,12 @@ Module SigmaProtocol (π : SigmaProtocolParams)
       }
     ].
 
-  Instance Valid_Com {LA} {A}
-    `{ValidPackage LA [interface] [interface val #[ ADV ] : chStatement → chBinding] A}
-    : ValidPackage (fsetU Sigma_locs LA) [interface] [interface val #[ SOUNDNESS ] : chStatement → chBool] (Com_Binding ∘ A).
-  Proof.
-    eapply valid_link with [interface val #[ADV] : chStatement → chBinding ].
-    2: assumption.
-    apply Com_Binding.
-  Defined.
+  Ltac invalid_adv :=
+    rewrite ?code_link_bind;
+    apply rsame_head=> ?;
+    apply rsame_head=> ?;
+    rewrite !code_link_scheme;
+    apply r_ret; auto.
 
   Lemma binding:
     ∀ LA A LAdv Adv,
@@ -408,15 +404,10 @@ Module SigmaProtocol (π : SigmaProtocolParams)
       fdisjoint LA (Sigma_locs :|: LAdv) →
       AdvantageE (Com_Binding ∘ Adv) (Special_Soundness_f ∘ Adv) A <= (ɛ_soundness A Adv).
     intros LA A LAdv Adv VA VAdv Hdisj.
-    pose proof (
-           Advantage_triangle_chain (Com_Binding ∘ Adv) [::
+    ssprove triangle (Com_Binding ∘ Adv) [::
              (Special_Soundness_t ∘ Adv)
-           ] (Special_Soundness_f ∘ Adv) A
-         ) as ineq.
-    advantage_sum simpl in ineq.
+           ] (Special_Soundness_f ∘ Adv) A as ineq.
     apply: ler_trans. 1: exact ineq.
-    clear ineq.
-    unfold ɛ_soundness.
     rewrite ger_addr.
 
     assert (AdvantageE (Com_Binding ∘ Adv) (Special_Soundness_t ∘ Adv) A = 0) as ɛ_Adv.
@@ -429,10 +420,64 @@ Module SigmaProtocol (π : SigmaProtocolParams)
     1: apply Special_Soundness_t.
     2,3: assumption.
 
-    simplify_eq_rel h.
-    ssprove_code_simpl.
-    ssprove_code_simpl_more.
-    (* TODO: this does not simplify *)
-  Admitted.
+    intros id So To m hin.
+    invert_interface_in hin.
+    unfold get_op_default.
+    destruct lookup_op as [f|] eqn:e.
+    2: { exfalso.
+         simpl in e.
+         chUniverse_eqP_handle.
+         chUniverse_eqP_handle.
+         inversion e.
+    }
+    simpl in e.
+    chUniverse_eqP_handle.
+    chUniverse_eqP_handle.
+    rewrite cast_fun_K in e.
+    inversion e.
+
+    clear e H0.
+
+    destruct lookup_op as [f0|] eqn:e.
+    2: { exfalso.
+         simpl in e.
+         chUniverse_eqP_handle.
+         chUniverse_eqP_handle.
+         inversion e.
+    }
+    simpl in e.
+    chUniverse_eqP_handle.
+    chUniverse_eqP_handle.
+    rewrite cast_fun_K in e.
+    inversion e.
+
+    clear e H0.
+
+    destruct (Adv ADV).
+    2: invalid_adv.
+    destruct t, s.
+    repeat destruct chUniverse_eqP.
+    2,3: invalid_adv.
+    apply rsame_head=> run.
+    destruct run.
+    destruct s0.
+    destruct s0, s1.
+
+    rewrite !code_link_bind.
+    apply rsame_head=> v1.
+
+    rewrite !code_link_bind.
+    apply rsame_head=> v2.
+
+    rewrite code_link_if.
+    rewrite !code_link_scheme.
+
+
+    match goal with
+        | [ |- context[if ?b then _ else _]] => case b
+    end.
+
+    all: apply r_ret; auto.
+  Qed.
 
 End SigmaProtocol.
