@@ -174,9 +174,10 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
   Definition Extractor (h : choiceStatement) (a : choiceMessage)
                        (e : choiceChallenge) (e' : choiceChallenge)
                        (z : choiceResponse)  (z' : choiceResponse) : 'option choiceWitness :=
-    Some (fto (invg(((otf z) - (otf z')) * ((otf e)-(otf e'))))).
+    Some (fto ((otf z - otf z') / (otf e - otf e'))).
 
 End MyAlg.
+
 
 Local Open Scope package_scope.
 
@@ -188,7 +189,7 @@ Import MyParam MyAlg Schnorr.
   Arit (uniform i_witness) → Arit (uniform i_witness) :=
   fun z => fto ((otf z) + e * w).
 
-Lemma order_ge1 : g ^+ succn (succn (Zp_trunc q)) = g ^+ q.
+Lemma order_ge1 : succn (succn (Zp_trunc q)) = q.
 Proof.
   rewrite Zp_cast.
   - reflexivity.
@@ -201,8 +202,8 @@ Proof.
   subst f'. unfold f.
   exists (fun x => (fto (otf x - w * e))).
   all: intro x; unfold fto, otf; rewrite !enum_rankK.
-  - rewrite GRing.addrK enum_valK. reflexivity. 
-  - rewrite GRing.subrK enum_valK. reflexivity. 
+  - by rewrite addrK enum_valK.
+  - by rewrite subrK enum_valK.
 Qed.
 
 Lemma schnorr_SHVZK:
@@ -247,24 +248,13 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma schnorr_soundness:
-  ∀ LA A Adv,
-    ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
-    ɛ_soundness A Adv= 0.
-Proof.
-  intros LA A Adv HVa.
-  unfold ɛ_soundness.
-  apply: eq_rel_perf_ind_eq.
-
-Admitted.
-
 Lemma hiding_adv :
   ∀ LA A,
     ValidPackage LA [interface val #[ HIDING ] : chInput → 'option chMessage] A_export A →
-    aux_hiding A = 0.
+    ɛ_hiding A = 0.
 Proof.
   intros LA A Va.
-  unfold aux_hiding.
+  unfold ɛ_hiding.
   apply: eq_rel_perf_ind_eq.
   2,3 : rewrite ?fset0U; apply fdisjoints0. 
   simplify_eq_rel hwe.
@@ -354,6 +344,16 @@ Proof.
   trivial.
 Qed.
 
+(* Lemma gt_mul_inv : ∀ (g h: gT) x y, (h == g ^+ (x - y) :> gT) = (g ^+y * h == g ^+ x :> gT). *)
+(* Proof. *)
+(*   intros g h x y. *)
+(*   rewrite -expgD. *)
+(*   rewrite -subrI. *)
+(*   rewrite subrK. *)
+(*   rewrite addrAC. *)
+(* Qed. *)
+(*   rewrite -(inj_eq (@mulgI gT (g^+y))). *)
+
 Lemma extractor_success:
   ∀ LA A LAdv Adv,
     ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
@@ -399,14 +399,124 @@ Proof.
   apply reflection_nonsense in Heqs4.
 
   rewrite H0.
+  f_equal.
+  rewrite otf_fto.
+  rewrite expg_mod.
+  2: rewrite order_ge1; apply expg_order.
+  rewrite expgM.
+  rewrite expg_mod.
+  2: rewrite order_ge1; apply expg_order.
+  rewrite expgD.
+  rewrite -FinRing.zmodVgE.
+  rewrite expg_zneg.
+  2: apply cycle_id.
+  rewrite Heqs4 rel.
+  rewrite !expgMn.
+  2-3: apply group_prodC.
+  rewrite invMg.
+  rewrite !expgMn.
+  2: apply group_prodC.
+  rewrite !group_prodA.
+  rewrite group_prodC.
+  rewrite group_prodA.
+  rewrite group_prodA.
+  rewrite -expgMn.
+  2: apply group_prodC.
+  rewrite mulVg.
+  rewrite expg1n mul1g.
+  rewrite -expg_zneg.
+  2: { have Hx : exists ix, otf h = g ^+ ix.
+       { apply /cycleP. rewrite -g_gen. apply: in_setT. }
+       destruct Hx as [ix ->].
+       apply mem_cycle. }
+  rewrite expgAC.
+  rewrite [otf h ^+ (- otf s1) ^+ _] expgAC.
+  rewrite -expgD.
+  rewrite -expgM.
+  have <- := @expg_mod _ q.
+  2: { have Hx : exists ix, otf h = g ^+ ix.
+       { apply /cycleP. rewrite -g_gen. apply: in_setT. }
+       destruct Hx as [ix ->].
+       rewrite expgAC /q.
+       rewrite expg_order.
+       apply expg1n. }
+  rewrite -modnMmr.
+  (* NOTE: *)
+  (* Exponent type (subgroup) is Z_q. q is prime. Hence forall x \in Z_q, x < q. *)
+  (* Since q is prime all x's are co-prime? *)
 
-  rewrite otf_fto expg_mod.
+  (* FIXME: *)
+  (* Currently the inverse element is in Z_q. *)
+  (* The element (e - e') is not... *)
+  (* The element is treated as a natural number modulo the order of the group. *)
+  (* This should be equivalent. *)
+  (* Prove this *)
+  have -> :
+    (modn
+       (addn (@nat_of_ord (S (S (Zp_trunc q))) (@otf Challenge s0))
+             (@nat_of_ord (S (S (Zp_trunc q)))
+                          (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
+                                      (@otf Challenge s1)))) q) =
+    (@nat_of_ord (S (S (Zp_trunc q)))
+                   (@Zp_add (S (Zp_trunc q)) (@otf Challenge s0) (@Zp_opp (S (Zp_trunc q)) (@otf Challenge s1)))).
+  { simpl.
+    rewrite -> order_ge1 at 2.
+    rewrite -> order_ge1 at 3.
+    rewrite -> order_ge1 at 4.
+    rewrite -> order_ge1 at 5.
+    rewrite modnDmr.
+    destruct (otf s1) as [a Ha].
+    destruct a as [| Pa].
+    - simpl.
+      rewrite subn0.
+      rewrite modnn.
+      rewrite addn0.
+      rewrite modnDr.
+      rewrite -> order_ge1 at 3.
+      rewrite modn_small.
+      + reflexivity.
+      + rewrite <- order_ge1 at 2. apply ltn_ord.
+    - simpl.
+      rewrite -> order_ge1 at 3.
+      rewrite modnDmr.
+      reflexivity. }
+  have -> :
+    (modn
+       (muln (@nat_of_ord (S (S (Zp_trunc q)))
+                          (@GRing.inv (FinRing.UnitRing.unitRingType (Zp_finUnitRingType (Zp_trunc q)))
+                                      (@GRing.add (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
+                                                  (@otf Challenge s0)
+                                                  (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
+                                                              (@otf Challenge s1)))))
+             (@nat_of_ord (S (S (Zp_trunc q)))
+                          (@Zp_add (S (Zp_trunc q)) (@otf Challenge s0) (@Zp_opp (S (Zp_trunc q)) (@otf Challenge s1))))) q) =
+    (Zp_mul
+       (@GRing.inv (FinRing.UnitRing.unitRingType (Zp_finUnitRingType (Zp_trunc q)))
+                   (@GRing.add (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
+                               (@otf Challenge s0)
+                               (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
+                                           (@otf Challenge s1))))
+       (@Zp_add (S (Zp_trunc q)) (@otf Challenge s0) (@Zp_opp (S (Zp_trunc q)) (@otf Challenge s1)))).
+  { rewrite -modnMmr.
+    simpl.
+    rewrite modnDmr.
+    rewrite -> order_ge1 at 3.
+    rewrite -> order_ge1 at 4.
+    rewrite -> order_ge1 at 6.
+    rewrite -> order_ge1 at 7.
+    rewrite -> order_ge1 at 7.
+    rewrite modnMmr.
+    reflexivity.
+  }
+  rewrite Zp_mulVz.
+  { cbn. by rewrite eq_refl. }
+  rewrite -> order_ge1 at 1.
+  set m := (@GRing.add (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q)))) (@otf Challenge s0)
+             (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q)))) (@otf Challenge s1))).
+  destruct m as [m Hm].
+  simpl.
+  rewrite order_ge1 in Hm.
 Admitted.
-
-
-
-
-
 
 Theorem schnorr_com_binding:
   ∀ LA A LAdv Adv,

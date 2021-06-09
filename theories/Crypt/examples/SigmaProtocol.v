@@ -257,7 +257,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
      }
     ].
 
-  Definition aux_hiding A :=
+  Definition ɛ_hiding A :=
     AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK false) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK false) A.
   
   Theorem commitment_hiding :
@@ -266,7 +266,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
       (∀ A',
         ValidPackage (fsetU LA Sigma_locs) [interface val #[ RUN ] : chInput → 'option chTranscript] A_export A' →
         Advantage SHVZK A' <= eps) →
-      AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true) A <= (aux_hiding A) + eps + eps.
+      AdvantageE (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) (Hiding_ideal ∘ Sigma_to_Com ∘ SHVZK true) A <= (ɛ_hiding A) + eps + eps.
   Proof.
     intros LA A eps Va Hadv.
     ssprove triangle (Hiding_real ∘ Sigma_to_Com ∘ SHVZK true) [::
@@ -276,7 +276,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
       as ineq.
     apply: ler_trans. 1: exact ineq.
     clear ineq.
-    unfold aux_hiding.
+    unfold ɛ_hiding.
     (* 2,3 : by rewrite !fdisjointUr fdisjoints0. *)
     rewrite -!Advantage_link.
     eapply ler_add. 
@@ -314,19 +314,6 @@ Module SigmaProtocol (π : SigmaProtocolParams)
         assumption.
   Qed.
 
-  (* Definition Extractor' : *)
-  (*   ∀ {L} (h : choiceStatement) (a : choiceMessage) (e e' : choiceChallenge) (z z' : choiceResponse), *)
-  (*     code fset0 L 'option choiceWitness. *)
-  (* Proof. *)
-  (*   intros L h a e e' z z'. *)
-  (*   have H := @Extractor fset0 h a e e' z z'. *)
-  (*   eapply mkprog with H. *)
-  (*   eapply valid_injectMap. *)
-  (*   2: apply H. *)
-  (*   rewrite -fset0E. *)
-  (*   apply fsub0set.  *)
-  (* Defined. *)
-
   Definition Special_Soundness_f:
     package Sigma_locs
       [interface val #[ ADV ] : chStatement → chBinding]
@@ -342,7 +329,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
         v1 ← Verify' h a e z ;;
         v2 ← Verify' h a e' z' ;;
         if (andb (e != e') (andb (otf v1) (otf v2))) then
-            match Extractor h a e e' z' z' with
+            match Extractor h a e e' z z' with
             | Some w => ret (fto (R (otf h) (otf w)))
             | None => ret (fto false)
             end
