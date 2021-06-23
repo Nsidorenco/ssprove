@@ -345,7 +345,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
      def #[ SOUNDNESS ] (h : chStatement) : chBool
       {
         #import {sig #[ ADV ] : chStatement → chBinding} as A ;;
-        '(a, tmp) ← A h ;;
+        '(a, tmp) ← A(h) ;;
         let '(c1, c2) := tmp in
         let '(e, z) := c1 in
         let '(e', z') := c2 in
@@ -442,6 +442,7 @@ Module SigmaProtocol (π : SigmaProtocolParams)
 
     destruct (Adv ADV).
     2: invalid_adv.
+
     destruct t, s.
     repeat destruct chUniverse_eqP.
     2,3: invalid_adv.
@@ -450,20 +451,14 @@ Module SigmaProtocol (π : SigmaProtocolParams)
     destruct s0.
     destruct s0, s1.
 
-    rewrite !code_link_bind.
-    apply rsame_head=> v1.
-
-    rewrite !code_link_bind.
-    apply rsame_head=> v2.
-
-    rewrite code_link_if.
+    rewrite ?code_link_bind.
+    apply rsame_head=> ?.
+    rewrite ?code_link_bind.
+    apply rsame_head=> ?.
     rewrite !code_link_scheme.
-
-
     match goal with
-        | [ |- context[if ?b then _ else _]] => case b
+        | [ |- context[if ?b then _ else _]] => case b eqn:rel
     end.
-
     all: apply r_ret; auto.
   Qed.
 

@@ -185,6 +185,22 @@ Module Schnorr := SigmaProtocol MyParam MyAlg.
 
 Import MyParam MyAlg Schnorr.
 
+Context (n : nat).
+Definition key_size : nat := 2^n.
+Definition key_size_pos : Positive key_size := _.
+Definition Key : chUniverse := chFin (mkpos key_size).
+Context (PRF : Key → Witness).
+
+Definition key_location : Location := (Key; 2).
+
+Definition Commit_RO (h : choiceStatement) (w : choiceWitness):
+  code (fset [:: key_location]) [interface] (choiceMessage × choiceState) :=
+  {code
+     key ← get key_location ;;
+     let r := fto (PRF key) in
+      ret (fto (g ^+ otf r), r)
+  }.
+
 #[local] Definition f (e w : Witness) :
   Arit (uniform i_witness) → Arit (uniform i_witness) :=
   fun z => fto ((otf z) + e * w).
@@ -344,15 +360,90 @@ Proof.
   trivial.
 Qed.
 
-(* Lemma gt_mul_inv : ∀ (g h: gT) x y, (h == g ^+ (x - y) :> gT) = (g ^+y * h == g ^+ x :> gT). *)
-(* Proof. *)
-(*   intros g h x y. *)
-(*   rewrite -expgD. *)
-(*   rewrite -subrI. *)
-(*   rewrite subrK. *)
-(*   rewrite addrAC. *)
-(* Qed. *)
-(*   rewrite -(inj_eq (@mulgI gT (g^+y))). *)
+Lemma otf_neq (a b : choiceChallenge) :
+  a != b -> otf a != otf b.
+Proof.
+  apply: contra=> H.
+  rewrite bij_eq in H; [assumption| apply enum_val_bij].
+Qed.
+
+Lemma neq_pos (q : nat) (a b : Zp_finZmodType q):
+  a != b ->
+  (0 < (a - b)%R)%N.
+Proof.
+  intros Hneq.
+  simpl.
+  rewrite modnDmr.
+  destruct a as [a Ha].
+  destruct b as [b Hb].
+  simpl.
+  cbn in Hneq.
+  rewrite eqnE in Hneq.
+  rewrite lt0n.
+
+  eapply contraFneq.
+  2: reflexivity.
+  intros H.
+  destruct b as [| Pb].
+  - simpl in H.
+    rewrite subn0 in H.
+    rewrite modnDr in H.
+    rewrite modn_small in H.
+    2: apply Ha.
+    rewrite H in Hneq.
+    discriminate.
+  - simpl in H.
+    case Hgt : (leq (S a) (S Pb)).
+    + rewrite addnBA in H.
+      2: { rewrite -ltn_predRL in Hb.
+           rewrite -pred_Sn in Hb.
+           apply ltnW in Hb.
+           apply Hb. }
+      have Hc : (subn (addn a q.+1) Pb.+1) =
+                (subn q (subn Pb a)).
+      1: { rewrite subnBA.
+           2: rewrite - ltnS; assumption.
+           rewrite addnC.
+           reflexivity. }
+      rewrite Hc in H.
+      rewrite modn_small in H.
+      2: apply sub_ord_proof.
+      eapply predU1l in H.
+      erewrite Bool.orb_false_r in H.
+      rewrite subn_eq0 in H.
+      rewrite ltn_geF in H.
+      1: assumption.
+      rewrite ltn_subLR.
+      2: { rewrite ltnS in Hgt.
+           apply Hgt. }
+      apply ltn_addl.
+      rewrite -ltn_predRL in Hb.
+      rewrite -pred_Sn in Hb.
+      apply Hb.
+    + rewrite neq_ltn in Hneq.
+      rewrite Hgt in Hneq.
+      rewrite Bool.orb_false_l in Hneq.
+      clear Hgt.
+      rewrite addnBCA in H.
+      3: { apply ltnW in Hb.
+           apply ltnSE in Hb.
+           apply Hb. }
+      2: { apply ltnW in Hneq.
+           apply Hneq. }
+      rewrite modnDl in H.
+      rewrite modn_small in H.
+      2: { rewrite ltn_subLR.
+           + apply ltn_addl; apply Ha.
+           + apply ltnW; assumption.
+      }
+      eapply predU1l in H.
+      erewrite Bool.orb_false_r in H.
+      rewrite subn_eq0 in H.
+      rewrite ltn_geF in H.
+      1: assumption.
+      apply Hneq.
+Qed.
+
 
 Lemma extractor_success:
   ∀ LA A LAdv Adv,
@@ -441,16 +532,6 @@ Proof.
        rewrite expg_order.
        apply expg1n. }
   rewrite -modnMmr.
-  (* NOTE: *)
-  (* Exponent type (subgroup) is Z_q. q is prime. Hence forall x \in Z_q, x < q. *)
-  (* Since q is prime all x's are co-prime? *)
-
-  (* FIXME: *)
-  (* Currently the inverse element is in Z_q. *)
-  (* The element (e - e') is not... *)
-  (* The element is treated as a natural number modulo the order of the group. *)
-  (* This should be equivalent. *)
-  (* Prove this *)
   have -> :
     (modn
        (addn (@nat_of_ord (S (S (Zp_trunc q))) (@otf Challenge s0))
@@ -513,10 +594,18 @@ Proof.
   rewrite -> order_ge1 at 1.
   set m := (@GRing.add (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q)))) (@otf Challenge s0)
              (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q)))) (@otf Challenge s1))).
-  destruct m as [m Hm].
-  simpl.
-  rewrite order_ge1 in Hm.
-Admitted.
+  apply otf_neq in Heqb.
+  rewrite prime_coprime.
+  2: apply prime_order.
+  rewrite gtnNdvd.
+  - done.
+  - subst m. apply neq_pos.
+    apply Heqb.
+  - destruct m as [k Hk].
+    simpl.
+    rewrite order_ge1 in Hk.
+    apply Hk.
+Qed.
 
 Theorem schnorr_com_binding:
   ∀ LA A LAdv Adv,
