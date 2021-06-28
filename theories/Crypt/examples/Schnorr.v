@@ -185,22 +185,6 @@ Module Schnorr := SigmaProtocol MyParam MyAlg.
 
 Import MyParam MyAlg Schnorr.
 
-Context (n : nat).
-Definition key_size : nat := 2^n.
-Definition key_size_pos : Positive key_size := _.
-Definition Key : chUniverse := chFin (mkpos key_size).
-Context (PRF : Key → Witness).
-
-Definition key_location : Location := (Key; 2).
-
-Definition Commit_RO (h : choiceStatement) (w : choiceWitness):
-  code (fset [:: key_location]) [interface] (choiceMessage × choiceState) :=
-  {code
-     key ← get key_location ;;
-     let r := fto (PRF key) in
-      ret (fto (g ^+ otf r), r)
-  }.
-
 #[local] Definition f (e w : Witness) :
   Arit (uniform i_witness) → Arit (uniform i_witness) :=
   fun z => fto ((otf z) + e * w).
@@ -222,7 +206,9 @@ Proof.
   - by rewrite subrK enum_valK.
 Qed.
 
-Lemma schnorr_SHVZK:
+(* Main theorem. *)
+(* Proves that Schnorr is a ∑-protocol with perfect special honest-verifier zero-knowledge *)
+Theorem schnorr_SHVZK:
   ∀ LA A, 
     ValidPackage LA [interface val #[ RUN ] : chInput → 'option chTranscript] A_export A →
     Advantage SHVZK A = 0.
@@ -296,11 +282,11 @@ Proof.
     + ssprove_sync_eq=> a.
       apply r_ret.
       move=> ???.
-      intuition.
+      auto.
     + move=> a a'.
       eapply r_ret.
       move=> ???.
-      destruct a, a'; intuition.
+      destruct a, a'; auto.
     + move=> a a'.
       apply rpre_hypothesis_rule.
       move=> s0 s1 [Ha Hs].
@@ -315,33 +301,31 @@ Proof.
          split; reflexivity.
       ++ destruct s,s2.
          destruct s,s2.
-         exfalso. rewrite - boolp.falseE. assumption.
+         exfalso; rewrite - boolp.falseE; assumption.
       ++ exfalso; rewrite - boolp.falseE; assumption.
       ++ exfalso; rewrite - boolp.falseE; assumption.
-  - eapply r_bind with (λ '(b₀, s₀) '(b₁, s₁), b₀ =  b₁ /\ s₀ = s₁).
+  - eapply r_bind.
     1: { apply r_ret=>?? ->.
-         split; reflexivity. }
+         reflexivity. }
     move=> a a'.
     apply rpre_hypothesis_rule=> s0 s1 H.
     inversion H.
     destruct a,a'.
-    + destruct s.
-      destruct s2.
-      destruct s.
-      destruct s2.
+    + destruct s, s2.
+      destruct s, s2.
       apply r_ret=> ?? [Hs1 Hs2].
-      inversion H0.
       simpl in Hs1, Hs2.
-      rewrite Hs1 Hs2 H1.
+      rewrite Hs1 Hs2.
       split; reflexivity.
-    + inversion H0.
-    + inversion H0.
+    + discriminate.
+    + discriminate.
     + apply r_ret=> ?? [Hs1 Hs2].
       simpl in Hs1, Hs2.
-      rewrite Hs1 Hs2 H1.
+      rewrite Hs1 Hs2.
       split; reflexivity.
 Qed.
 
+(* Main theorem proving that the Schnorr protocol has perfect hiding. *)
 Theorem schnorr_com_hiding :
   ∀ LA A,
     ValidPackage LA [interface val #[ HIDING ] : chInput → 'option chMessage] A_export A →
@@ -369,82 +353,20 @@ Qed.
 
 Lemma neq_pos (q : nat) (a b : Zp_finZmodType q):
   a != b ->
-  (0 < (a - b)%R)%N.
+  (a - b != 0).
 Proof.
-  intros Hneq.
-  simpl.
-  rewrite modnDmr.
-  destruct a as [a Ha].
-  destruct b as [b Hb].
-  simpl.
-  cbn in Hneq.
-  rewrite eqnE in Hneq.
-  rewrite lt0n.
-
-  eapply contraFneq.
-  2: reflexivity.
-  intros H.
-  destruct b as [| Pb].
-  - simpl in H.
-    rewrite subn0 in H.
-    rewrite modnDr in H.
-    rewrite modn_small in H.
-    2: apply Ha.
-    rewrite H in Hneq.
-    discriminate.
-  - simpl in H.
-    case Hgt : (leq (S a) (S Pb)).
-    + rewrite addnBA in H.
-      2: { rewrite -ltn_predRL in Hb.
-           rewrite -pred_Sn in Hb.
-           apply ltnW in Hb.
-           apply Hb. }
-      have Hc : (subn (addn a q.+1) Pb.+1) =
-                (subn q (subn Pb a)).
-      1: { rewrite subnBA.
-           2: rewrite - ltnS; assumption.
-           rewrite addnC.
-           reflexivity. }
-      rewrite Hc in H.
-      rewrite modn_small in H.
-      2: apply sub_ord_proof.
-      eapply predU1l in H.
-      erewrite Bool.orb_false_r in H.
-      rewrite subn_eq0 in H.
-      rewrite ltn_geF in H.
-      1: assumption.
-      rewrite ltn_subLR.
-      2: { rewrite ltnS in Hgt.
-           apply Hgt. }
-      apply ltn_addl.
-      rewrite -ltn_predRL in Hb.
-      rewrite -pred_Sn in Hb.
-      apply Hb.
-    + rewrite neq_ltn in Hneq.
-      rewrite Hgt in Hneq.
-      rewrite Bool.orb_false_l in Hneq.
-      clear Hgt.
-      rewrite addnBCA in H.
-      3: { apply ltnW in Hb.
-           apply ltnSE in Hb.
-           apply Hb. }
-      2: { apply ltnW in Hneq.
-           apply Hneq. }
-      rewrite modnDl in H.
-      rewrite modn_small in H.
-      2: { rewrite ltn_subLR.
-           + apply ltn_addl; apply Ha.
-           + apply ltnW; assumption.
-      }
-      eapply predU1l in H.
-      erewrite Bool.orb_false_r in H.
-      rewrite subn_eq0 in H.
-      rewrite ltn_geF in H.
-      1: assumption.
-      apply Hneq.
+  apply contraPneq=> H_not_eq.
+  have H : (a - b == 0) by rewrite H_not_eq.
+  rewrite subr_eq0 in H.
+  apply reflection_nonsense in H.
+  rewrite H.
+  unfold not=> contra.
+  rewrite eq_refl in contra.
+  discriminate.
 Qed.
 
-
+(* Lemma proving that the output of the extractor defined for Schnorr's protocol *)
+(* is perfectly indistinguishable from real protocol execution. *)
 Lemma extractor_success:
   ∀ LA A LAdv Adv,
     ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
@@ -457,23 +379,24 @@ Proof.
   2,3: apply Hdisj.
 
   simplify_eq_rel h.
+
+  (* This program is composed with abstract adversarial code. *)
+  (* We need to ensure that the composition is valid. *)
   destruct (Adv ADV).
   1: destruct t, s; repeat destruct (chUniverse_eqP).
   2-4: apply r_ret; auto.
   apply rsame_head=> run.
   rewrite !code_link_scheme.
   destruct run, s0, s0, s1.
-
   match goal with
       | [ |- context[if ?b then _ else _]] => case b eqn:rel
   end.
-
   2: apply r_ret; auto.
-
   apply r_ret.
   intros ?? s_eq.
   split; [| apply s_eq].
 
+  (* Algebraic proof that the produced witness satisfies the relation. *)
   unfold R.
   unfold "&&" in rel.
   inversion rel.
@@ -491,39 +414,27 @@ Proof.
 
   rewrite H0.
   f_equal.
-  rewrite otf_fto.
-  rewrite expg_mod.
+  rewrite otf_fto expg_mod.
   2: rewrite order_ge1; apply expg_order.
-  rewrite expgM.
-  rewrite expg_mod.
+  rewrite expgM expg_mod.
   2: rewrite order_ge1; apply expg_order.
-  rewrite expgD.
-  rewrite -FinRing.zmodVgE.
-  rewrite expg_zneg.
+  rewrite expgD -FinRing.zmodVgE expg_zneg.
   2: apply cycle_id.
-  rewrite Heqs4 rel.
-  rewrite !expgMn.
+  rewrite Heqs4 rel !expgMn.
   2-3: apply group_prodC.
-  rewrite invMg.
-  rewrite !expgMn.
+  rewrite invMg !expgMn.
   2: apply group_prodC.
   rewrite !group_prodA.
-  rewrite group_prodC.
-  rewrite group_prodA.
-  rewrite group_prodA.
-  rewrite -expgMn.
+  rewrite group_prodC 2!group_prodA -expgMn.
   2: apply group_prodC.
-  rewrite mulVg.
-  rewrite expg1n mul1g.
-  rewrite -expg_zneg.
+  rewrite mulVg expg1n mul1g -expg_zneg.
   2: { have Hx : exists ix, otf h = g ^+ ix.
        { apply /cycleP. rewrite -g_gen. apply: in_setT. }
        destruct Hx as [ix ->].
        apply mem_cycle. }
   rewrite expgAC.
   rewrite [otf h ^+ (- otf s1) ^+ _] expgAC.
-  rewrite -expgD.
-  rewrite -expgM.
+  rewrite -expgD -expgM.
   have <- := @expg_mod _ q.
   2: { have Hx : exists ix, otf h = g ^+ ix.
        { apply /cycleP. rewrite -g_gen. apply: in_setT. }
@@ -592,21 +503,24 @@ Proof.
   rewrite Zp_mulVz.
   { cbn. by rewrite eq_refl. }
   rewrite -> order_ge1 at 1.
-  set m := (@GRing.add (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q)))) (@otf Challenge s0)
-             (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q)))) (@otf Challenge s1))).
   apply otf_neq in Heqb.
   rewrite prime_coprime.
   2: apply prime_order.
   rewrite gtnNdvd.
   - done.
-  - subst m. apply neq_pos.
-    apply Heqb.
-  - destruct m as [k Hk].
+  - rewrite lt0n.
+    apply neq_pos.
+    assumption.
+  - destruct (otf s0 - otf s1) as [k Hk].
     simpl.
     rewrite order_ge1 in Hk.
     apply Hk.
 Qed.
 
+(* Main theorem *)
+(* The commitment scheme instantiated from Schnorr' protocol *)
+(* is binding equal to the hardness of the relation *)
+(* (I.e. how hard is it to produce a valid witness for a fixed public input)*)
 Theorem schnorr_com_binding:
   ∀ LA A LAdv Adv,
     ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
