@@ -191,20 +191,18 @@ Import MyParam MyAlg Schnorr.
 
 Lemma order_ge1 : succn (succn (Zp_trunc q)) = q.
 Proof.
-  rewrite Zp_cast.
-  - reflexivity.
-  - apply prime_gt1, prime_order. 
+  apply Zp_cast, prime_gt1, prime_order.
 Qed.
 
 Lemma bij_f w e : bijective (f w e).
 Proof.
-  pose f' := f e w.
-  subst f'. unfold f.
+  unfold f.
   exists (fun x => (fto (otf x - w * e))).
   all: intro x; unfold fto, otf; rewrite !enum_rankK.
   - by rewrite addrK enum_valK.
   - by rewrite subrK enum_valK.
 Qed.
+
 
 (* Main theorem. *)
 (* Proves that Schnorr is a ∑-protocol with perfect special honest-verifier zero-knowledge *)
@@ -250,6 +248,159 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma otf_neq (a b : choiceChallenge) :
+  a != b -> otf a != otf b.
+Proof.
+  apply: contra=> H.
+  rewrite bij_eq in H; [assumption| apply enum_val_bij].
+Qed.
+
+Lemma neq_pos (q : nat) (a b : Zp_finZmodType q):
+  a != b ->
+  (a - b != 0).
+Proof.
+  apply contraPneq=> H_not_eq.
+  have H : (a - b == 0) by rewrite H_not_eq.
+  rewrite subr_eq0 in H.
+  apply reflection_nonsense in H.
+  rewrite H.
+  unfold not=> contra.
+  rewrite eq_refl in contra.
+  discriminate.
+Qed.
+
+(* Lemma proving that the output of the extractor defined for Schnorr's protocol *)
+(* is perfectly indistinguishable from real protocol execution. *)
+Lemma extractor_success:
+  ∀ LA A LAdv Adv,
+    ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
+    ValidPackage LAdv [interface] [interface val #[ ADV ] : chStatement → chBinding] Adv →
+    fdisjoint LA (Sigma_locs :|: LAdv) →
+    ɛ_soundness A Adv = 0.
+Proof.
+  intros LA A LAdv Adv VA VAdv Hdisj.
+  apply: eq_rel_perf_ind_eq.
+  2,3: apply Hdisj.
+  simplify_eq_rel h.
+  (* This program is composed with abstract adversarial code. *)
+  (* We need to ensure that the composition is valid. *)
+  destruct (Adv ADV).
+  1: destruct t, s; repeat destruct (chUniverse_eqP).
+  2-4: apply r_ret; auto.
+  apply rsame_head=> run.
+  rewrite !code_link_scheme.
+  destruct run, s0, s0, s1.
+  match goal with
+      | [ |- context[if ?b then _ else _]] => case b eqn:rel
+  end.
+  2: apply r_ret; auto.
+  apply r_ret.
+  intros ?? s_eq.
+  split; [| apply s_eq].
+  (* Algebraic proof that the produced witness satisfies the relation. *)
+  unfold R.
+  unfold "&&" in rel.
+  inversion rel.
+  repeat match goal with
+      | [ |- context[if ?b then _ else _]] => case b eqn:?
+  end.
+  2,3: discriminate.
+  rewrite otf_fto in Heqs4.
+  rewrite otf_fto in rel.
+  apply reflection_nonsense in rel.
+  apply reflection_nonsense in Heqs4.
+  rewrite H0.
+  f_equal.
+  rewrite otf_fto expg_mod.
+  2: rewrite order_ge1; apply expg_order.
+  rewrite expgM expg_mod.
+  2: rewrite order_ge1; apply expg_order.
+  rewrite expgD -FinRing.zmodVgE expg_zneg.
+  2: apply cycle_id.
+  rewrite Heqs4 rel !expgMn.
+  2-3: apply group_prodC.
+  rewrite invMg !expgMn.
+  2: apply group_prodC.
+  rewrite !group_prodA.
+  rewrite group_prodC 2!group_prodA -expgMn.
+  2: apply group_prodC.
+  rewrite mulVg expg1n mul1g -expg_zneg.
+  2: { have Hx : exists ix, otf h = g ^+ ix.
+       { apply /cycleP. rewrite -g_gen. apply: in_setT. }
+       destruct Hx as [ix ->].
+       apply mem_cycle. }
+  rewrite expgAC.
+  rewrite [otf h ^+ (- otf s1) ^+ _] expgAC.
+  rewrite -expgD -expgM.
+  have <- := @expg_mod _ q.
+  2: { have Hx : exists ix, otf h = g ^+ ix.
+       { apply /cycleP. rewrite -g_gen. apply: in_setT. }
+       destruct Hx as [ix ->].
+       rewrite expgAC /q.
+       rewrite expg_order.
+       apply expg1n. }
+  rewrite -modnMmr.
+  have -> :
+    (modn
+       (addn (@nat_of_ord (S (S (Zp_trunc q))) (@otf Challenge s0))
+             (@nat_of_ord (S (S (Zp_trunc q)))
+                          (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
+                                      (@otf Challenge s1)))) q) =
+    (@nat_of_ord (S (S (Zp_trunc q)))
+                   (@Zp_add (S (Zp_trunc q)) (@otf Challenge s0) (@Zp_opp (S (Zp_trunc q)) (@otf Challenge s1)))).
+  { simpl.
+    rewrite modnDmr.
+    destruct (otf s1) as [a Ha].
+    destruct a as [| Pa].
+    - simpl.
+      rewrite subn0 modnn addn0 modnDr.
+      rewrite -> order_ge1 at 3.
+      rewrite modn_small.
+      + reflexivity.
+      + rewrite <- order_ge1 at 2. apply ltn_ord.
+    - simpl.
+      rewrite <- order_ge1 at 4.
+      rewrite modnDmr.
+      reflexivity. }
+  have -> :
+    (modn
+       (muln (@nat_of_ord (S (S (Zp_trunc q)))
+                          (@GRing.inv (FinRing.UnitRing.unitRingType (Zp_finUnitRingType (Zp_trunc q)))
+                                      (@GRing.add (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
+                                                  (@otf Challenge s0)
+                                                  (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
+                                                              (@otf Challenge s1)))))
+             (@nat_of_ord (S (S (Zp_trunc q)))
+                          (@Zp_add (S (Zp_trunc q)) (@otf Challenge s0) (@Zp_opp (S (Zp_trunc q)) (@otf Challenge s1))))) q) =
+    (Zp_mul
+       (@GRing.inv (FinRing.UnitRing.unitRingType (Zp_finUnitRingType (Zp_trunc q)))
+                   (@GRing.add (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
+                               (@otf Challenge s0)
+                               (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
+                                           (@otf Challenge s1))))
+       (@Zp_add (S (Zp_trunc q)) (@otf Challenge s0) (@Zp_opp (S (Zp_trunc q)) (@otf Challenge s1)))).
+  { simpl.
+    rewrite modnDmr.
+    rewrite <- order_ge1 at 9.
+    rewrite modnMmr.
+    reflexivity. }
+  rewrite Zp_mulVz.
+  1: cbn; by rewrite eq_refl.
+  rewrite -> order_ge1 at 1.
+  apply otf_neq in Heqb.
+  rewrite prime_coprime.
+  2: apply prime_order.
+  rewrite gtnNdvd.
+  - done.
+  - rewrite lt0n.
+    apply neq_pos.
+    assumption.
+  - destruct (otf s0 - otf s1) as [k Hk].
+    simpl.
+    rewrite order_ge1 in Hk.
+    apply Hk.
+Qed.
+
 Lemma hiding_adv :
   ∀ LA A,
     ValidPackage LA [interface val #[ HIDING ] : chInput → 'option chMessage] A_export A →
@@ -258,7 +409,7 @@ Proof.
   intros LA A Va.
   unfold ɛ_hiding.
   apply: eq_rel_perf_ind_eq.
-  2,3 : rewrite ?fset0U; apply fdisjoints0. 
+  2,3 : rewrite ?fset0U; apply fdisjoints0.
   simplify_eq_rel hwe.
   simplify_linking.
   ssprove_code_simpl.
@@ -294,7 +445,7 @@ Proof.
       ++ destruct s,s2.
          destruct s,s2.
          rewrite Ha.
-         apply r_ret=>?? Hs0. 
+         apply r_ret=>?? Hs0.
          inversion Hs0.
          simpl in H, H0.
          rewrite H H0 Hs.
@@ -344,179 +495,6 @@ Proof.
   trivial.
 Qed.
 
-Lemma otf_neq (a b : choiceChallenge) :
-  a != b -> otf a != otf b.
-Proof.
-  apply: contra=> H.
-  rewrite bij_eq in H; [assumption| apply enum_val_bij].
-Qed.
-
-Lemma neq_pos (q : nat) (a b : Zp_finZmodType q):
-  a != b ->
-  (a - b != 0).
-Proof.
-  apply contraPneq=> H_not_eq.
-  have H : (a - b == 0) by rewrite H_not_eq.
-  rewrite subr_eq0 in H.
-  apply reflection_nonsense in H.
-  rewrite H.
-  unfold not=> contra.
-  rewrite eq_refl in contra.
-  discriminate.
-Qed.
-
-(* Lemma proving that the output of the extractor defined for Schnorr's protocol *)
-(* is perfectly indistinguishable from real protocol execution. *)
-Lemma extractor_success:
-  ∀ LA A LAdv Adv,
-    ValidPackage LA [interface val #[ SOUNDNESS ] : chStatement → chBool] A_export A →
-    ValidPackage LAdv [interface] [interface val #[ ADV ] : chStatement → chBinding] Adv →
-    fdisjoint LA (Sigma_locs :|: LAdv) →
-    ɛ_soundness A Adv = 0.
-Proof.
-  intros LA A LAdv Adv VA VAdv Hdisj.
-  apply: eq_rel_perf_ind_eq.
-  2,3: apply Hdisj.
-
-  simplify_eq_rel h.
-
-  (* This program is composed with abstract adversarial code. *)
-  (* We need to ensure that the composition is valid. *)
-  destruct (Adv ADV).
-  1: destruct t, s; repeat destruct (chUniverse_eqP).
-  2-4: apply r_ret; auto.
-  apply rsame_head=> run.
-  rewrite !code_link_scheme.
-  destruct run, s0, s0, s1.
-  match goal with
-      | [ |- context[if ?b then _ else _]] => case b eqn:rel
-  end.
-  2: apply r_ret; auto.
-  apply r_ret.
-  intros ?? s_eq.
-  split; [| apply s_eq].
-
-  (* Algebraic proof that the produced witness satisfies the relation. *)
-  unfold R.
-  unfold "&&" in rel.
-  inversion rel.
-
-  repeat match goal with
-      | [ |- context[if ?b then _ else _]] => case b eqn:?
-  end.
-  2,3: discriminate.
-
-  rewrite otf_fto in Heqs4.
-  rewrite otf_fto in rel.
-
-  apply reflection_nonsense in rel.
-  apply reflection_nonsense in Heqs4.
-
-  rewrite H0.
-  f_equal.
-  rewrite otf_fto expg_mod.
-  2: rewrite order_ge1; apply expg_order.
-  rewrite expgM expg_mod.
-  2: rewrite order_ge1; apply expg_order.
-  rewrite expgD -FinRing.zmodVgE expg_zneg.
-  2: apply cycle_id.
-  rewrite Heqs4 rel !expgMn.
-  2-3: apply group_prodC.
-  rewrite invMg !expgMn.
-  2: apply group_prodC.
-  rewrite !group_prodA.
-  rewrite group_prodC 2!group_prodA -expgMn.
-  2: apply group_prodC.
-  rewrite mulVg expg1n mul1g -expg_zneg.
-  2: { have Hx : exists ix, otf h = g ^+ ix.
-       { apply /cycleP. rewrite -g_gen. apply: in_setT. }
-       destruct Hx as [ix ->].
-       apply mem_cycle. }
-  rewrite expgAC.
-  rewrite [otf h ^+ (- otf s1) ^+ _] expgAC.
-  rewrite -expgD -expgM.
-  have <- := @expg_mod _ q.
-  2: { have Hx : exists ix, otf h = g ^+ ix.
-       { apply /cycleP. rewrite -g_gen. apply: in_setT. }
-       destruct Hx as [ix ->].
-       rewrite expgAC /q.
-       rewrite expg_order.
-       apply expg1n. }
-  rewrite -modnMmr.
-  have -> :
-    (modn
-       (addn (@nat_of_ord (S (S (Zp_trunc q))) (@otf Challenge s0))
-             (@nat_of_ord (S (S (Zp_trunc q)))
-                          (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
-                                      (@otf Challenge s1)))) q) =
-    (@nat_of_ord (S (S (Zp_trunc q)))
-                   (@Zp_add (S (Zp_trunc q)) (@otf Challenge s0) (@Zp_opp (S (Zp_trunc q)) (@otf Challenge s1)))).
-  { simpl.
-    rewrite -> order_ge1 at 2.
-    rewrite -> order_ge1 at 3.
-    rewrite -> order_ge1 at 4.
-    rewrite -> order_ge1 at 5.
-    rewrite modnDmr.
-    destruct (otf s1) as [a Ha].
-    destruct a as [| Pa].
-    - simpl.
-      rewrite subn0.
-      rewrite modnn.
-      rewrite addn0.
-      rewrite modnDr.
-      rewrite -> order_ge1 at 3.
-      rewrite modn_small.
-      + reflexivity.
-      + rewrite <- order_ge1 at 2. apply ltn_ord.
-    - simpl.
-      rewrite -> order_ge1 at 3.
-      rewrite modnDmr.
-      reflexivity. }
-  have -> :
-    (modn
-       (muln (@nat_of_ord (S (S (Zp_trunc q)))
-                          (@GRing.inv (FinRing.UnitRing.unitRingType (Zp_finUnitRingType (Zp_trunc q)))
-                                      (@GRing.add (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
-                                                  (@otf Challenge s0)
-                                                  (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
-                                                              (@otf Challenge s1)))))
-             (@nat_of_ord (S (S (Zp_trunc q)))
-                          (@Zp_add (S (Zp_trunc q)) (@otf Challenge s0) (@Zp_opp (S (Zp_trunc q)) (@otf Challenge s1))))) q) =
-    (Zp_mul
-       (@GRing.inv (FinRing.UnitRing.unitRingType (Zp_finUnitRingType (Zp_trunc q)))
-                   (@GRing.add (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
-                               (@otf Challenge s0)
-                               (@GRing.opp (FinRing.Zmodule.zmodType (Zp_finZmodType (S (Zp_trunc q))))
-                                           (@otf Challenge s1))))
-       (@Zp_add (S (Zp_trunc q)) (@otf Challenge s0) (@Zp_opp (S (Zp_trunc q)) (@otf Challenge s1)))).
-  { rewrite -modnMmr.
-    simpl.
-    rewrite modnDmr.
-    rewrite -> order_ge1 at 3.
-    rewrite -> order_ge1 at 4.
-    rewrite -> order_ge1 at 6.
-    rewrite -> order_ge1 at 7.
-    rewrite -> order_ge1 at 7.
-    rewrite modnMmr.
-    reflexivity.
-  }
-  rewrite Zp_mulVz.
-  { cbn. by rewrite eq_refl. }
-  rewrite -> order_ge1 at 1.
-  apply otf_neq in Heqb.
-  rewrite prime_coprime.
-  2: apply prime_order.
-  rewrite gtnNdvd.
-  - done.
-  - rewrite lt0n.
-    apply neq_pos.
-    assumption.
-  - destruct (otf s0 - otf s1) as [k Hk].
-    simpl.
-    rewrite order_ge1 in Hk.
-    apply Hk.
-Qed.
-
 (* Main theorem *)
 (* The commitment scheme instantiated from Schnorr' protocol *)
 (* is binding equal to the hardness of the relation *)
@@ -529,8 +507,7 @@ Theorem schnorr_com_binding:
     AdvantageE (Com_Binding ∘ Adv) (Special_Soundness_f ∘ Adv) A <= 0.
 Proof.
   intros LA A LAdv Adv VA VAdv Hdisj.
-  have H := binding LA A LAdv Adv VA VAdv Hdisj.
-
+  have H := commitment_binding LA A LAdv Adv VA VAdv Hdisj.
   rewrite extractor_success in H.
   - apply H.
   - apply Hdisj.
