@@ -9,7 +9,7 @@ Set Warnings "notation-overridden,ambiguous-paths".
 From Crypt Require Import Axioms ChoiceAsOrd SubDistr Couplings
   UniformDistrLemmas FreeProbProg Theta_dens RulesStateProb UniformStateProb
   pkg_core_definition chUniverse pkg_composition pkg_rhl
-  Package Prelude.
+  Package Prelude RandomOracle.
 
 From Coq Require Import Utf8.
 From extructures Require Import ord fset fmap.
@@ -58,12 +58,12 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
   #[local] Existing Instance Response_pos.
   #[local] Existing Instance State_pos.
 
-  Definition choiceWitness : chUniverse := 'fin #|Witness|.
-  Definition choiceStatement : chUniverse := 'fin #|Statement|.
-  Definition choiceMessage : chUniverse := 'fin #|Message|.
-  Definition choiceChallenge : chUniverse := 'fin #|Challenge|.
-  Definition choiceResponse : chUniverse := 'fin #|Response|.
-  Definition choiceTranscript : chUniverse := chProd (chProd choiceMessage choiceChallenge) choiceResponse.
+  Definition choiceWitness := 'fin #|Witness|.
+  Definition choiceStatement := 'fin #|Statement|.
+  Definition choiceMessage := 'fin #|Message|.
+  Definition choiceChallenge := 'fin #|Challenge|.
+  Definition choiceResponse := 'fin #|Response|.
+  Definition choiceTranscript := chProd (chProd choiceMessage choiceChallenge) choiceResponse.
   Definition choiceState := 'fin #|State|.
   Definition choiceBool := 'fin #|bool_choiceType|.
 
@@ -91,13 +91,6 @@ Module Type SigmaProtocolAlgorithms (π : SigmaProtocolParams).
       (e : choiceChallenge) (e' : choiceChallenge)
       (z : choiceResponse)  (z' : choiceResponse), 'option choiceWitness.
 
-  Notation " 'chStatement' " := choiceStatement (in custom pack_type at level 2).
-  Notation " 'chMessage' " := choiceMessage (in custom pack_type at level 2).
-  Notation " 'chResponse' " := choiceResponse (in custom pack_type at level 2).
-  Notation " 'chFst' " :=
-    (chProd (chProd choiceMessage choiceState) choiceChallenge)
-      (in custom pack_type at level 2).
-
 End SigmaProtocolAlgorithms.
 
 Module SigmaProtocol (π : SigmaProtocolParams)
@@ -106,8 +99,8 @@ Module SigmaProtocol (π : SigmaProtocolParams)
   Import π.
   Import Alg.
 
-  (* Compatibility *)
   Notation " 'chStatement' " := choiceStatement (in custom pack_type at level 2).
+  Notation " 'chRelation' " := (chProd choiceStatement choiceWitness) (in custom pack_type at level 2).
   Notation " 'chInput' " := (chProd (chProd choiceStatement choiceWitness) choiceChallenge) (in custom pack_type at level 2).
   Notation " 'chMessage' " := choiceMessage (in custom pack_type at level 2).
   Notation " 'chChallenge' " := choiceChallenge (in custom pack_type at level 2).
@@ -117,7 +110,6 @@ Module SigmaProtocol (π : SigmaProtocolParams)
                                   (chProd choiceMessage
                                     (chProd (chProd choiceChallenge choiceChallenge)
                                             (chProd choiceResponse choiceResponse)))) (in custom pack_type at level 2).
-  Definition i_witness := #|Witness|.
   Definition i_challenge := #|Challenge|.
   Definition RUN : nat := 0.
   Definition COM : nat := 1.
