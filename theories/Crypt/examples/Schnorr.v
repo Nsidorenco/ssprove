@@ -165,11 +165,8 @@ Module MyAlg <: SigmaProtocolAlgorithms MyParam.
        ret (fto (g ^+ (otf z) * (otf h ^- (otf e))), e, z)
     }.
 
-  Definition Verify (h : choiceStatement) (a : choiceMessage) (e : choiceChallenge) (z : choiceResponse):
-    code Sigma_locs [interface] choiceBool :=
-    {code
-       ret (fto (g ^+ (otf z) == (otf a) * (otf h) ^+ (otf e)))
-    }.
+  Definition Verify (h : choiceStatement) (a : choiceMessage) (e : choiceChallenge) (z : choiceResponse) : choiceBool
+             := (fto (g ^+ (otf z) == (otf a) * (otf h) ^+ (otf e))).
 
   Definition Extractor (h : choiceStatement) (a : choiceMessage)
                        (e : choiceChallenge) (e' : choiceChallenge)
@@ -259,8 +256,8 @@ Lemma neq_pos (q : nat) (a b : Zp_finZmodType q):
   a != b ->
   (a - b != 0).
 Proof.
-  apply contraPneq=> H_not_eq.
-  have H : (a - b == 0) by rewrite H_not_eq.
+  apply contraPneq=> H_eq.
+  have H : (a - b == 0) by rewrite H_eq.
   rewrite subr_eq0 in H.
   apply reflection_nonsense in H.
   rewrite H.

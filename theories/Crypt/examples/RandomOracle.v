@@ -23,32 +23,17 @@ Import mc_1_10.Num.Theory.
 
 Import PackageNotation.
 
-(* Module Type RandomOracleParams. *)
-
-(*   Parameter Query : finType. *)
-(*   Parameter Random : finType. *)
-
-(*   Parameter Query_pos : Positive #|Query|. *)
-(*   Parameter Random_pos : Positive #|Random|. *)
-
-(*   #[local] Existing Instance Query_pos.  *)
-(*   #[local] Existing Instance Random_pos.  *)
-
-(*   Definition chQuery := 'fin #|Query|. *)
-(*   Definition chRandom := 'fin #|Random|. *)
-
-(* End RandomOracleParams. *)
-
-Module Type RO.
-  (*      (π : RandomOracleParams). *)
-  (* Import π. *)
-
+Module Type ROParams.
   Parameter Query : finType.
   Parameter Random : finType.
 
   Parameter Query_pos : Positive #|Query|.
   Parameter Random_pos : Positive #|Random|.
 
+End ROParams.
+
+Module RO (π : ROParams).
+  Import π.
   #[local] Existing Instance Query_pos.
   #[local] Existing Instance Random_pos.
 
@@ -58,33 +43,31 @@ Module Type RO.
   Notation " 'random " := chRandom (in custom pack_type at level 2).
 
   Definition i_random := #|Random|.
-  Definition QUERY : nat := 0.
+  Definition INIT : nat := 0.
+  Definition QUERY : nat := 1.
 
-  Definition queries_loc : Location := (chMap chQuery chRandom ; 1%N).
-  Definition init_loc : Location := ('bool ; 2%N).
-  Definition RO_locs : {fset Location} := fset [:: queries_loc ; init_loc].
+  Definition queries_loc : Location := (chMap chQuery chRandom ; 2%N).
+  Definition RO_locs : {fset Location} := fset [:: queries_loc].
 
-  Definition Init : code RO_locs [interface] 'unit :=
-    {code
-       init ← get init_loc ;;
-       if init
-        then ret Datatypes.tt
-        else put queries_loc := emptym ;; put init_loc := true ;; ret Datatypes.tt
-    }.
+  Definition RO_exports := [interface val #[ INIT ] : 'unit → 'unit ;
+                                      val #[ QUERY ] : 'query → 'random].
 
   Definition RO :
     package RO_locs
       [interface]
-      [interface val #[ QUERY ] : 'query → 'random] :=
+      RO_exports :=
     [package
+      def #[ INIT ] (_ : 'unit) : 'unit
+      {
+        put queries_loc := emptym ;; ret Datatypes.tt
+      };
       def #[ QUERY ] (q : 'query) : 'random
       {
-        Init ;;
         queries ← get queries_loc ;;
         match (queries q) with
         | Some r => ret r
         | None   => r ← sample uniform i_random ;;
-                    put queries_loc := (setm queries q r) ;;
+                    (* put queries_loc := (setm queries q r) ;; *)
                     ret r
         end
       }
