@@ -30,7 +30,7 @@ jobs:
       id: cache
       uses: actions/cache@v2
       with:
-        path: "~/ssprove/.opam"
+        path: "~/.opam"
         key: ${{ matrix.image }}-opam-${{github.base_ref}}-${{github.ref}}
         restore-keys: |
           ${{ matrix.image }}-opam--refs/heads/${{github.base_ref}}
@@ -39,6 +39,10 @@ jobs:
       with:
        opam_file: 'ssprove.opam'
        custom_image: ${{ matrix.image }}
+       before_install: |
+        startGroup "Restore opam"
+          cp ~/.opam ~/coq/.opam
+        endGroup
        before_script: |
         startGroup "Workaround permission issue"
           sudo chown -R coq:coq .  # <--
@@ -47,6 +51,10 @@ jobs:
         startGroup "Build"
           opam exec -- make -j4
         endGroup
+       after_script: |
+        startGroup "Move opam cache"
+          cp ~/coq/.opam ~/.opam
+         endGroup
     - name: Revert permissions
       # to avoid a warning at cleanup time
       if: ${{ always() }}
