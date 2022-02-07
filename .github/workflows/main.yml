@@ -31,9 +31,9 @@ jobs:
       uses: actions/cache@v2
       with:
         path: "~/.opam"
-        key: ${{ matrix.image }}-opam-${{github.base_ref}}-${{github.ref}}
+        key: ${{ matrix.image }}-opam-cache-${{github.base_ref}}-${{github.ref}}
         restore-keys: |
-          ${{ matrix.image }}-opam--refs/heads/${{github.base_ref}}
+          ${{ matrix.image }}-opam-cache--refs/heads/${{github.base_ref}}
     - uses: actions/checkout@v2
     - uses: coq-community/docker-coq-action@v1
       with:
