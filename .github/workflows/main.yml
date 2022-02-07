@@ -42,7 +42,15 @@ jobs:
       with:
        opam_file: 'ssprove.opam'
        custom_image: ${{ matrix.image }}
+       before_script: |
+        startGroup "Workaround permission issue"
+          sudo chown -R coq:coq .  # <--
+        endGroup
        script: |
         startGroup "Build"
           opam exec -- make -j4
         endGroup
+    - name: Revert permissions
+      # to avoid a warning at cleanup time
+      if: ${{ always() }}
+      run: sudo chown -R 1001:116 .  # <--
