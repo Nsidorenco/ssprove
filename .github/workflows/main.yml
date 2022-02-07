@@ -41,7 +41,7 @@ jobs:
        custom_image: ${{ matrix.image }}
        before_install: |
         startGroup "Restore opam"
-          cp ~/.opam ~/coq/.opam
+          cp -r ~/.opam ~/coq/.opam
         endGroup
        before_script: |
         startGroup "Workaround permission issue"
@@ -53,7 +53,7 @@ jobs:
         endGroup
        after_script: |
         startGroup "Move opam cache"
-          cp ~/coq/.opam ~/.opam
+          cp -r ~/coq/.opam ~/.opam
          endGroup
     - name: Revert permissions
       # to avoid a warning at cleanup time
