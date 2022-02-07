@@ -23,7 +23,7 @@ jobs:
       matrix:
         coq_version:
           - '8.14.0'
-        ocaml_version: ['4.07.1']
+        ocaml_version: ['4.07.1-flambda']
       max-parallel: 4
       fail-fast: false  # don't stop jobs if one fails
     steps:
