@@ -21,9 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        coq_version:
-          - '8.14.1'
-        ocaml_version: ['4.07.1-flambda']
+        image:
+          - mathcomp/mathcomp:1.13.0-coq:8.14
       max-parallel: 4
       fail-fast: false  # don't stop jobs if one fails
     steps:
