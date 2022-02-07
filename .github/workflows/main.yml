@@ -33,5 +33,5 @@ jobs:
        custom_image: ${{ matrix.image }}
        script: |
         startGroup "Build"
-          make -j4
+          opam exec -- make -j4
         endGroup
