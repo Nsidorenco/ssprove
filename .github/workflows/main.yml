@@ -42,8 +42,7 @@ jobs:
        before_install: |
         startGroup "Restore opam"
           mkdir -p ~/coq/.opam. 
-          cp -r /home/.opam ~/.opam 2>/dev/null
-          :
+          (cp -r /home/.opam ~/.opam 2>/dev/null || :)
         endGroup
        before_script: |
         startGroup "Workaround permission issue"
@@ -56,8 +55,7 @@ jobs:
        after_script: |
         startGroup "Move opam cache"
           mkdir -p ~/.opam
-          cp -r ~/.opam /home/.opam
-          :
+          (cp -r ~/.opam /home/.opam || :)
          endGroup
     - name: Revert permissions
       # to avoid a warning at cleanup time
