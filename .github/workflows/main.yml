@@ -13,9 +13,6 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
   
-env:
-  CACHE_KEY: opam-flambda-noPslBase-${{github.base_ref}}-${{github.ref}} 
-  
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
@@ -33,10 +30,10 @@ jobs:
       id: cache
       uses: actions/cache@v2
       with:
-        path: "~/coq/.opam"
-        key: ${{env.CACHE_KEY}}
+        path: "~/ssprove/.opam"
+        key: ${{ matrix.image }}-opam-${{github.base_ref}}-${{github.ref}}
         restore-keys: |
-          opam-flambda-noPslBase--refs/heads/${{github.base_ref}}
+          ${{ matrix.image }}-opam--refs/heads/${{github.base_ref}}
     - uses: actions/checkout@v2
     - uses: coq-community/docker-coq-action@v1
       with:
