@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
   
 env:
-  TEST_TAG: user/myapp:test
+  TEST_TAG: nsidorenco/ssprove:test
   MATHCOMP_VERSION: 1.13.0
   COQ_VERSION: 8.14
 
