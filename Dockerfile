@@ -1,5 +1,10 @@
-ARG MC_TAG="1.13.0-coq-8.14"
-FROM mathcomp/mathcomp:${MC_TAG}
+ARG MATHCOMP_VERSION="latest"
+ENV MATHCOMP_VERSION=${MATHCOMP_VERSION}
+
+ARG COQ_VERSION="dev"
+ENV COQ_VERSION=${COQ_VERSION}
+
+FROM mathcomp/mathcomp:${MATHCOMP_VERSION}-coq-${COQ_VERSION}
 
 COPY ssprove.opam ./
 
