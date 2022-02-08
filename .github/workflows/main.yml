@@ -22,28 +22,15 @@ jobs:
     strategy:
       matrix:
         image:
-          - mathcomp/mathcomp:1.13.0-coq-8.14
+          - nsidorenco/ssprove:latest
       max-parallel: 4
       fail-fast: false  # don't stop jobs if one fails
     steps:
-    - name: Try to restore build cache
-      id: cache
-      uses: actions/cache@v2
-      with:
-        path: "~/.opam"
-        key: ${{ matrix.image }}-opam-cache-${{github.base_ref}}-${{github.ref}}
-        restore-keys: |
-          ${{ matrix.image }}-opam-cache--refs/heads/${{github.base_ref}}
     - uses: actions/checkout@v2
     - uses: coq-community/docker-coq-action@v1
       with:
        opam_file: 'ssprove.opam'
        custom_image: ${{ matrix.image }}
-       before_install: |
-        startGroup "Restore opam"
-          mkdir -p ~/coq/.opam. 
-          (cp -r /home/.opam ~/.opam 2>/dev/null || :)
-        endGroup
        before_script: |
         startGroup "Workaround permission issue"
           sudo chown -R coq:coq .  # <--
@@ -52,11 +39,6 @@ jobs:
         startGroup "Build"
           opam exec -- make -j4
         endGroup
-       after_script: |
-        startGroup "Move opam cache"
-          mkdir -p ~/.opam
-          (cp -r ~/.opam /home/.opam || :)
-         endGroup
     - name: Revert permissions
       # to avoid a warning at cleanup time
       if: ${{ always() }}
