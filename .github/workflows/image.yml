@@ -73,7 +73,7 @@ jobs:
         with:
           context: .
           build-args: |
-            MATHCOMP_VERSION=${{ MATHCOMP_VERSION }}
-            COQ_VERSION=${{ COQ_VERSION }}
+            MATHCOMP_VERSION=${{ env.MATHCOMP_VERSION }}
+            COQ_VERSION=${{ env.COQ_VERSION }}
           push: true
           tags: nsidorenco/ssprove:latest
