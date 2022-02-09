@@ -53,7 +53,7 @@ jobs:
       - uses: coq-community/docker-coq-action@v1
         with:
           opam_file: 'ssprove.opam'
-          custom_image: ${{ env.TEST_TAG }}
+          custom_image: docker.io/${{ env.TEST_TAG }}
           before_script: |
             startGroup "Workaround permission issue"
               sudo chown -R coq:coq .  # <--
