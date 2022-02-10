@@ -21,7 +21,29 @@ env:
   COQ_VERSION: 8.14
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: coq-community/docker-coq-action@v1
+      with:
+       opam_file: 'ssprove.opam'
+       custom_image: ${{ env.MATHCOMP_VERSION }}-coq-${{ env.COQ_VERSION }}
+       before_script: |
+        startGroup "Workaround permission issue"
+          sudo chown -R coq:coq .  # <--
+        endGroup
+       script: |
+        startGroup "Build"
+          opam exec -- make -j4
+        endGroup
+    - name: Revert permissions
+      # to avoid a warning at cleanup time
+      if: ${{ always() }}
+      run: sudo chown -R 1001:116 .  # <--
+      
   docker:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -38,35 +60,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
-      -
-        name: Build and export to Docker
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          build-args: |
-            MATHCOMP_VERSION=${{ env.MATHCOMP_VERSION }}
-            COQ_VERSION=${{ env.COQ_VERSION }}
-          load: true
-          tags: ${{ env.TEST_TAG }}
-          
-      - uses: coq-community/docker-coq-action@v1
-        with:
-          opam_file: 'ssprove.opam'
-          custom_image: docker.io/${{ env.TEST_TAG }}
-          before_script: |
-            startGroup "Workaround permission issue"
-              sudo chown -R coq:coq .  # <--
-            endGroup
-          script: |
-            startGroup "Build"
-              opam exec -- make -j4
-            endGroup
-      - name: Revert permissions
-        # to avoid a warning at cleanup time
-        if: ${{ always() }}
-        run: sudo chown -R 1001:116 .  # <--
-        
       -
         name: Build and push
         uses: docker/build-push-action@v2
