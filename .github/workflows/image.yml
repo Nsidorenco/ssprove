@@ -28,7 +28,7 @@ jobs:
     - uses: coq-community/docker-coq-action@v1
       with:
        opam_file: 'ssprove.opam'
-       custom_image: ${{ env.MATHCOMP_VERSION }}-coq-${{ env.COQ_VERSION }}
+       custom_image: mathcomp/mathcomp:${{ env.MATHCOMP_VERSION }}-coq-${{ env.COQ_VERSION }}
        before_script: |
         startGroup "Workaround permission issue"
           sudo chown -R coq:coq .  # <--
